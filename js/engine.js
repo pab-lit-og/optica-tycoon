@@ -867,7 +867,9 @@ const G = {
     const F = this.currentFeature; if (!F) return; const g = this.company.currentGame; if (!g) { this.currentFeature = null; return; }
     F.progress = U.clamp((this.gameTime - F.startTime) / F.duration, 0, 1);
     if (F.progress >= 1) {
-      if (F.id === 'BugFixing') { const elapsed = (this.gameTime - F.startTime) / F.duration; const bugsLeft = (g.bugs || 0) > 0 || this.points.some(p => p.type === 'b' || p.type === 'br'); if (bugsLeft && elapsed < 4) return; if (this.points.length) return; }
+      /* como GDT: terminado el tiempo mínimo, el equipo sigue corrigiendo mientras queden defectos y el jugador decide cuándo lanzar
+         (botón «Lanzar ya»); sin defectos se lanza sola. Tope de seguridad: 20 veces la duración. */
+      if (F.id === 'BugFixing') { const elapsed = (this.gameTime - F.startTime) / F.duration; const bugsLeft = (g.bugs || 0) > 0 || this.points.some(p => p.type === 'b' || p.type === 'br'); if (bugsLeft && !F.releaseNow && elapsed < 20) { if (!F.readyNotified) { F.readyNotified = true; this.emit('bugfixReady', g); } return; } if (this.points.length) return; }
       this.finishCurrentMission();
     }
   },
