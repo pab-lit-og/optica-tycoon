@@ -1,0 +1,571 @@
+/* Óptica Tycoon — interfaz (barra de estado, paneles, diálogos) */
+'use strict';
+
+const UI = {
+  shownCash: 0, lastSliders: null,
+  $: s => document.querySelector(s),
+  esc: s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])),
+
+  init() {
+    document.querySelectorAll('.speedBtn').forEach(b => b.addEventListener('click', () => this.setSpeed(+b.dataset.speed)));
+    document.querySelectorAll('#actions button').forEach(b => b.addEventListener('click', () => this.action(b.dataset.action)));
+    this.$('#btnMenu').addEventListener('click', () => this.showMenu());
+    { const sb = this.$('#btnSound'); if (sb && typeof Sound !== 'undefined') { const paint = () => { sb.textContent = Sound.on ? '🔊' : '🔇'; sb.title = Sound.on ? 'Sonido activado (clic para silenciar)' : 'Sonido desactivado'; }; paint(); sb.addEventListener('click', () => { Sound.toggle(); paint(); }); } }
+    document.addEventListener('click', e => { if (e.target.closest && e.target.closest('.btn, #actions button, .speedBtn, .sel')) if (typeof Sound !== 'undefined') Sound.play('click'); }, true);
+    const cashBox = this.$('#cashLabel'); if (cashBox && cashBox.parentElement) { cashBox.parentElement.style.cursor = 'pointer'; cashBox.parentElement.title = 'Ver finanzas (F)'; cashBox.parentElement.addEventListener('click', () => { if (G.company && !this.busy()) this.showFinances(); }); }
+    document.addEventListener('keydown', e => { if (e.target && /INPUT|SELECT|TEXTAREA/.test(e.target.tagName)) return; if (G.company && !this.interlude && !this.$('#modalRoot').children.length && !e.ctrlKey && !e.metaKey && !e.altKey) { const k = e.key.toLowerCase(); const map = { n: 'newgame', i: 'research', p: 'staff', e: 'contracts', c: 'channels', h: 'history', t: 'taller' }; if (map[k]) { e.preventDefault(); return this.action(map[k]); } if (k === 'f') { e.preventDefault(); return this.showFinances(); } if (k === 'l') { e.preventDefault(); return this.showLocal(); } if (k === 'v') { e.preventDefault(); return this.cycleView(); } if (k === 'm' && typeof Sound !== 'undefined') { e.preventDefault(); const on = Sound.toggle(); const sb = this.$('#btnSound'); if (sb) sb.textContent = on ? '🔊' : '🔇'; return this.toast(on ? 'Sonido activado' : 'Sonido silenciado'); } if (k === '1' || k === '2' || k === '3' || k === '4') { e.preventDefault(); return this.setSpeed({ 1: 0.5, 2: 1, 3: 2, 4: 4 }[k]); } } if (e.code === 'Space' && !this.$('#modalRoot').children.length && G.company) { e.preventDefault(); this.setSpeed(G.userPaused ? (G.speed || 1) : 0); } if (e.code === 'Escape' && this.$('#modalRoot').children.length && this.closable) this.closeModal(); });
+    G.on('notification', n => this.showNotification(n)); G.on('sliders', st => this.showSliders(st)); G.on('reviews', g => this.showReviews(g));
+    G.on('booth', () => this.showBooth()); G.on('showCandidates', () => this.showStaff()); G.on('newGameFromContract', c => this.showNewGame(c));
+    G.on('refresh', () => { this.updateStatus(); this.updateProject(); this.updateSales(); this.updateActions(); }); G.on('status', () => { this.updateStatus(); this.updateProject(); });
+    G.on('points', () => this.updateProject()); G.on('week', () => { this.updateSales(); this.updateLog(); this.updateDepts(); }); G.on('log', () => this.updateLog());
+    G.on('sale', d => Scene.addFloater('+' + U.shortMoney(d.amount))); G.on('cash', v => { if (v < -1000) Scene.addFloater(U.shortMoney(v), '#c0392b'); });
+    G.on('gameover', () => { if (typeof Sound !== 'undefined') Sound.play('bad'); this.showGameOver(); }); G.on('achievement', list => this.newsBanner({ header: list.length === 1 ? '🏆 Logro: ' + list[0].name : `🏆 ${list.length} logros nuevos`, text: list.map(a => list.length === 1 ? a.desc : a.icon + ' ' + a.name).join(' · ') + ' (Menú → Puntuación y logros)', icon: '🏆', sound: 'fanfare' })); G.on('newsBanner', n => this.newsBanner(n)); G.on('soldout', g => this.newsBanner({ header: '📦 ' + g.title + ' se retira', text: `${U.num(g.unitsSold || 0)} monturas vendidas · ${U.money(g.revenue || 0)}. Pulsa su nombre en el Historial para ver su curva de ventas.`, icon: '📦', sound: 'cash' })); G.on('gameend', () => this.showEnd(true)); G.on('autosave', () => { if (G.save()) this.toast('Partida guardada automáticamente'); });
+    G.on('newgame', () => { this.updateDepts(); this.shownCash = G.company.cash; this.updateStatus(); this.updateProject(); this.updateSales(); this.updateLog(); this.updateActions(); this.buildDepartmentButtons(); });
+    /* mecánicas GDT: informe de colección, gala de premios y rachas */
+    G.on('report', rep => this.showReport(rep)); G.on('awards', c => this.showAwards(c, 0)); G.on('onfire', ch => { if (typeof Scene !== 'undefined' && Scene.addFloater) Scene.addFloater('🔥 ' + ch.name.split(' ')[0] + ' en racha', '#e67e22'); });
+    this.injectStyles();
+    this.buildDepartmentButtons();
+    this.showStart();
+  },
+  /* estilos de los elementos nuevos del núcleo (marcas de ayuda, carga de trabajo, informes, gala). Pocas reglas, prefijadas. */
+  injectStyles() {
+    if (document.getElementById('css-core')) return; const s = document.createElement('style'); s.id = 'css-core';
+    s.textContent = `.kmark{display:inline-block;min-width:16px;margin-left:6px;padding:0 6px;border-radius:9px;font-size:11px;font-weight:700;background:#eee;color:#666;cursor:help;vertical-align:middle}.kmark.good{background:#e9f7ef;color:#229710}.kmark.bad{background:#fdecea;color:#c0392b}.kmark.mid{background:#fff6dd;color:#9a6b00}
+.resp{margin-top:6px;font-size:12px;color:#555}.resp select{max-width:100%;font-size:12px;margin-left:4px}.wlist{display:flex;flex-wrap:wrap;gap:8px;margin:6px 0 10px}.wl-item{flex:1 1 170px;background:#fff;border:1px solid #e0d6c3;border-radius:8px;padding:6px 8px;font-size:12px}.wl-item .bar{margin:4px 0}.wl-item .bar div{background:#2faf1b}.wl-item.warn .bar div{background:#f39c12}.wl-item.over .bar div{background:#f42727}
+.tutorial-box{background:#ccf5ff;border:2px solid #a3e7ff;border-radius:8px;padding:8px 10px;margin:4px 0 10px;font-size:13px}.tutorial-box b{display:block;margin-bottom:2px}
+.report-lines{margin:8px 0;padding-left:22px}.report-lines li{margin:5px 0}.learned{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0}.repitem{margin:8px 0;padding:8px 10px;background:#fff;border:1px solid #e0d6c3;border-radius:8px}
+.gala{text-align:center;padding:6px}.gala .cat{font-size:22px;font-weight:700;margin:6px 0}.gala .nom{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:6px 10px;margin:4px auto;max-width:520px;border:1px solid #e0d6c3;border-radius:8px;background:#fff;text-align:left}.gala .nom.ours{border-color:#f47a20;background:#fff6dd}.gala .nom.win{border-width:2px;border-color:#229710;background:#e9f7ef}.gala .nom small{color:#777}.gala .trophy{font-size:26px}
+.fire{color:#e67e22;font-weight:700}.modal.tutorial .mhead h2::before{content:'📘 '}.spec{color:#8e44ad;font-weight:600}
+.lvl{display:inline-block;margin-left:6px;padding:0 6px;border-radius:9px;font-size:11px;font-weight:600;background:#e8f1fb;color:#004e8d;vertical-align:middle}
+.xp-list{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;margin:6px 0}.xp-item{background:#fff;border:1px solid #e0d6c3;border-radius:8px;padding:6px 8px;font-size:12px}.xp-item .bar{margin:4px 0}.xp-item .up{color:#229710;font-weight:700}
+.boost{margin:8px 0;padding:8px 10px;background:#fff6dd;border:1px solid #ffd17b;border-radius:8px;font-size:13px}.boost .bar div{background:#f47a20}.boost.ready{border-color:#f47a20}`;
+    document.head.appendChild(s);
+  },
+  /* botones de departamentos (uno por módulo registrado) al final del menú lateral */
+  buildDepartmentButtons() {
+    const nav = this.$('#actions'); if (!nav) return; nav.querySelectorAll('.dept').forEach(b => b.remove());
+    if (!Modules.list.length) return; const sep = document.createElement('div'); sep.className = 'dept sep'; sep.textContent = 'Departamentos'; nav.appendChild(sep);
+    for (const m of Modules.list) { if (!m.ui) continue; const b = document.createElement('button'); b.className = 'dept'; b.dataset.dept = m.id; b.title = m.name; b.innerHTML = `<i>${m.icon || '🏬'}</i><span>${m.name.replace(/^Departamento de (.)/i, (_, c) => c.toUpperCase()).split(' ')[0]}</span>`; b.addEventListener('click', () => this.showDepartment(m.id)); nav.appendChild(b); }
+  },
+  /* hay un diálogo que no se puede cerrar (fases, reseñas, aviso): no se abre nada encima */
+  busy() { if (this.interlude) { this.toast('Un momento: están llegando las reseñas'); return true; } if (this.currentModal && this.currentModal.closable === false) { this.toast('Termina primero el diálogo abierto'); return true; } return false; },
+  /* reescribe un bloque solo si su HTML ha cambiado (evita trabajo y parpadeos varias veces por segundo) */
+  setHTML(el, h) { if (!el || el._h === h) return false; el._h = h; el.innerHTML = h; return true; },
+  updateDepts() {
+    const el = this.$('#deptCards'); const co = G.company; if (!el || !co) return;
+    const reps = Modules.reports(co); if (!reps.length) { el.innerHTML = ''; return; }
+    if (!this.setHTML(el, reps.map(r => { const m = Modules.get(r.id) || {}; return `<div class="dcard" data-dc="${r.id}"><b>${m.icon || ''} ${this.esc((m.name || r.id).replace(/^Departamento de (.)/, (_, c) => c.toUpperCase()))}</b>${r.lines.slice(0, 2).map(l => `<small>${this.esc(l.label)}: <b>${this.esc(String(l.value))}</b></small>`).join('')}</div>`; }).join(''))) return;
+    el.querySelectorAll('[data-dc]').forEach(d => d.addEventListener('click', () => this.showDepartment(d.dataset.dc)));
+   this.localizeNumbers(this.$('#side')); },
+  showDepartment(id) {
+    if (this.busy()) return;
+    const m = Modules.get(id); const co = G.company; if (!m || !co) return; if (!m.ui) return this.toast('Departamento sin panel');
+    const spec = m.ui(co) || {}; const tabs = `<div class="depttabs">${Modules.list.filter(x => x.ui).map(x => `<button class="btn small ${x.id === id ? 'primary' : ''}" data-dtab="${x.id}">${x.icon || ''} ${this.esc(x.name.replace(/^Departamento de (.)/, (_, c) => c.toUpperCase()))}</button>`).join('')}</div>`;
+    const tipD = G.tutorialInline('department'); const tipH = tipD ? `<div class="tutorial-box"><b>📘 ${this.esc(tipD.header)}</b>${this.esc(tipD.text).replace(/\n/g, '<br>')}</div>` : '';
+    const el = this.modal({ title: 'Departamentos', wide: true, cls: 'dept-' + id, body: tabs + tipH + (spec.body || ''), buttons: spec.buttons || [{ label: 'Cerrar' }], onOpen: el => { el.querySelectorAll('[data-dtab]').forEach(b => b.addEventListener('click', () => { if (b.dataset.dtab !== id) this.showDepartment(b.dataset.dtab); })); if (spec.bind) spec.bind(el, () => this.showDepartment(id)); } });
+    return el;
+  },
+  setSpeed(s) { if (!G.company) return; G.userPaused = s === 0; if (s > 0) G.speed = s; if (!G.modalOpen) G.paused = s === 0; document.querySelectorAll('.speedBtn').forEach(b => b.classList.toggle('active', +b.dataset.speed === (G.userPaused ? 0 : G.speed))); },
+  toast(txt) { const t = document.createElement('div'); t.className = 'toast'; t.textContent = txt; document.body.appendChild(t); setTimeout(() => t.classList.add('show'), 10); setTimeout(() => { t.classList.remove('show'); setTimeout(() => t.remove(), 400); }, U.clamp(1600 + String(txt).length * 35, 2200, 6000)); },
+
+  /* ---------- modal ---------- */
+  modal(o) {
+    this.closeModal(true); this.closable = o.closable !== false; G.modalOpen = true; G.paused = true; this.currentModal = o;
+    const root = this.$('#modalRoot'); const back = document.createElement('div'); back.className = 'backdrop'; const m = document.createElement('div'); m.className = 'modal' + (o.wide ? ' wide' : '') + (o.cls ? ' ' + o.cls : '');
+    m.innerHTML = `<div class="mhead"><h2>${o.title}</h2>${this.closable ? '<button class="mclose" title="Cerrar">✕</button>' : ''}</div><div class="mbody">${o.body || ''}</div><div class="mfoot"></div>`;
+    const foot = m.querySelector('.mfoot'); (o.buttons || [{ label: 'OK', primary: true }]).forEach(b => { const bt = document.createElement('button'); bt.textContent = b.label; bt.className = 'btn' + (b.primary ? ' primary' : '') + (b.cls ? ' ' + b.cls : ''); bt.disabled = !!b.disabled; bt.addEventListener('click', () => { if (b.onClick) { if (b.onClick(m) === false) return; } if (!b.keep && this.currentModal === o) this.closeModal(); }); foot.appendChild(bt); });
+    if (this.closable) m.querySelector('.mclose').addEventListener('click', () => this.closeModal()); back.appendChild(m); root.appendChild(back); if (o.onOpen) o.onOpen(m); this.localizeNumbers(m); return m;
+  },
+  /* decimales con coma en los textos visibles (los miles llevan punto y siempre 3 cifras detrás) */
+  localizeNumbers(root) { if (!root) return; const w = document.createTreeWalker(root, NodeFilter.SHOW_TEXT); let n; const re = /(^|[^\d.])(\d+)\.(\d{1,2})(?![\d.])/g; while ((n = w.nextNode())) { if (re.test(n.nodeValue)) { re.lastIndex = 0; n.nodeValue = n.nodeValue.replace(re, '$1$2,$3'); } re.lastIndex = 0; } },
+  closeModal(silent) { const root = this.$('#modalRoot'); root.innerHTML = ''; const o = this.currentModal; this.currentModal = null; if (silent) return; G.modalOpen = false; if (o && o.onClose) o.onClose(); if (G.company && !G.company.notifications.length) G.paused = G.userPaused || false; this.updateActions(); },
+
+  /* ---------- pantalla inicial ---------- */
+  showStart() {
+    const has = G.hasSave();
+    this.modal({ title: '👓 Óptica Tycoon', closable: false, cls: 'start', body: `<p class="lead">Empiezas con un puesto de gafas en el mercado y 70.000 €. Diseña colecciones de monturas, gana clientes fieles, investiga tecnologías, contrata personal y convierte el puesto en una gran óptica con gabinete y marca propia.</p><label>Nombre de la óptica <input id="inCompany" value="Óptica ${['Lúa', 'Brétema', 'Mirada', 'Faro', 'Atlántica'][Math.floor(Math.random() * 5)]}" maxlength="24"></label><label>Tu nombre <input id="inPlayer" value="" placeholder="Tu nombre" maxlength="18"></label>`,
+      buttons: [{ label: 'Nueva partida', primary: true, onClick: m => { const c = m.querySelector('#inCompany').value.trim() || 'Óptica'; const p = m.querySelector('#inPlayer').value.trim() || 'Óptico'; G.newGame(c, p); this.setSpeed(1); } }, { label: 'Cargar partida', disabled: !has, onClick: () => { if (!G.load()) { this.toast('No se pudo cargar la partida'); return false; } this.setSpeed(1); this.toast('Partida cargada'); } }, { label: 'Importar…', onClick: () => { this.importGame(); return false; } }].concat(G.company ? [{ label: 'Volver a la partida' }] : []) });
+  },
+
+  /* ---------- barra de estado y paneles ---------- */
+  /* pestañas de salas (Óptica · Taller · Laboratorio · Gabinete), como los laboratorios de Game Dev Tycoon */
+  updateViewTabs() {
+    const el = this.$('#viewTabs'); if (!el || typeof Scene === 'undefined') return; const rooms = G.company ? Scene.roomsAvailable() : []; const sig = rooms.join(',') + '|' + Scene.view;
+    if (el._sig === sig) return; el._sig = sig; if (!rooms.length) { el.innerHTML = ''; el.style.display = 'none'; return; } el.style.display = 'flex';
+    const lab = { main: '🏬 Óptica', taller: '🛠️ Taller', lab: '🧪 Laboratorio', gabinete: '👁️ Gabinete' };
+    el.innerHTML = ['main'].concat(rooms).map(id => `<button data-view="${id}" class="${Scene.view === id ? 'on' : ''}" title="${id === 'main' ? 'Vista general de la óptica' : 'Ver la sala: todo el equipo comprado y quién trabaja ahí'} (tecla V)">${lab[id]}</button>`).join('');
+    el.querySelectorAll('button').forEach(b => b.addEventListener('click', () => { if (this.busy()) return; Scene.setView(b.dataset.view); this.updateViewTabs(); }));
+  },
+  cycleView() { const rooms = ['main'].concat(Scene.roomsAvailable()); if (rooms.length < 2) return; Scene.setView(rooms[(rooms.indexOf(Scene.view) + 1) % rooms.length]); this.updateViewTabs(); },
+  updateStatus() { this.updateViewTabs();
+    const co = G.company; if (!co) return; const d = co.getCurrentDate();
+    this.$('#companyName').textContent = co.name; this.$('#dateLabel').textContent = `${U.MONTHS[d.month - 1][0].toUpperCase() + U.MONTHS[d.month - 1].slice(1)} ${U.realYear(d.year)} · Sem ${d.week}`;
+    this.$('#fansLabel').textContent = U.num(co.fans); this.$('#rpLabel').textContent = U.num(co.researchPoints); this.$('#levelLabel').textContent = C.LEVELS[co.level].name;
+    const tr = co.flags.trends && co.flags.trends.currentTrend; const tb = this.$('#trendBadge'); tb.textContent = tr ? '📈 ' + tr.label : ''; tb.style.display = tr ? 'block' : 'none';
+  },
+  tickCash() { const co = G.company; if (!co) return; const diff = co.cash - this.shownCash; if (Math.abs(diff) < 1) this.shownCash = co.cash; else this.shownCash += diff * 0.15; const el = this.$('#cashLabel'); const t = U.money(this.shownCash); if (el.textContent !== t) { el.textContent = t; el.classList.toggle('neg', this.shownCash < 0); } },
+  updateActions() { const co = G.company; if (!co) return; const idle = G.isIdle(); const set = (a, on) => { const b = document.querySelector(`#actions button[data-action="${a}"]`); if (b) b.classList.toggle('disabled', !on); };
+    set('newgame', idle); set('research', co.researchEnabled); set('taller', co.researchEnabled); set('contracts', co.contractsEnabled); set('marketing', !!co.currentGame && co.hasResearch('Marketing')); set('staff', true); set('channels', true); set('history', co.gameLog.length > 0); },
+  updateProject() {
+    const co = G.company; if (!co) return; const el = this.$('#projectPanel'); const g = co.currentGame; let h = '';
+    if (g) {
+      const F = G.currentFeature; const stage = g.stage; let phase = 'Preparación'; let field = '';
+      if (F && F.type === 'mission') { phase = DATA.STAGES[stage - 1].name; field = DB.mission(F.id).name; } else if (F && F.id === 'BugFixing') { const left = Math.round(g.bugs || 0); phase = left > 0 ? `Corrigiendo defectos: quedan ${left} ✕` : 'Revisión final antes del lanzamiento'; } else if (F && F.type === 'prep') phase = 'Preparación';
+      let prog = F ? Math.round(F.progress * 100) : 0; const total = Math.max(0, Math.round(G.getGameProgress() * 100));
+      if (F && F.id === 'BugFixing') { const b0 = F.bugs0 || 1, left = g.bugs || 0; prog = Math.round(100 * Math.min(F.progress * 0.5 + 0.5 * (1 - left / b0), left > 0 ? 0.97 : 1)); }
+      if (F && F.delayUntil && G.gameTime < F.delayUntil) field = `⏸ Esperando al proveedor (${Math.ceil((F.delayUntil - G.gameTime) / WEEK_MS)} sem)`;
+      /* responsable del campo actual (featureResponsibility) y personal en racha */
+      const resp = F && F.type === 'mission' ? General.responsibleOf(co, F.id, g) : null; const respOn = F && F.type === 'mission' && G.isStaffResponsibilityEnabled(g); const fire = co.staff.filter(s => s.isOnFire()).map(s => s.name.split(' ')[0]);
+      const ready = co.staff.filter(s => G.canBoost(s)).map(s => s.name.split(' ')[0]);
+      const extra = (resp ? `Responsable: <b>${this.esc(resp.name)}</b>${resp.flags.expert === F.id ? ' <span class="spec">★</span>' : ''} <small>(carga ${Math.round(General.getEffectiveWorkload(resp, g))} %)</small>` : respOn ? 'Responsable: todo el equipo' : '') + (fire.length ? `${resp || respOn ? ' · ' : ''}<span class="fire">🔥 ${this.esc(fire.join(', '))} en racha</span>` : '') + (ready.length ? `${resp || respOn || fire.length ? ' · ' : ''}<span class="fire" title="Racha cargada: actívala desde la ficha del empleado">⚡ ${this.esc(ready.join(', '))}</span>` : '');
+      h = `<h3>${this.esc(g.title)} <small>${C.SIZE[g.size].label}</small></h3><div class="sub">${DB.topic(g.topic).name} · ${DB.genre(g.genre).name}${g.secondGenre ? '/' + DB.genre(g.secondGenre).name : ''} · ${g.platforms.map(p => (DB.platform(p) || { name: p }).name).join(', ')}</div>
+      <div class="phase">${phase}${field ? ' → <b>' + field + '</b>' : ''}</div>${extra ? `<div class="sub">${extra}</div>` : ''}<div class="bar"><div style="width:${prog}%"></div></div><div class="sub">Progreso total ${total} %</div><div class="bar thin"><div style="width:${total}%"></div></div>
+      <div class="counters"><span class="pt d">D ${Math.floor(g.designPoints)}</span><span class="pt t">T ${Math.floor(g.technologyPoints)}</span><span class="pt b">✕ ${Math.floor(g.bugs)}</span><span class="pt h">🔥 ${Math.floor(g.hypePoints)}</span></div>
+      <div class="sub">Coste acumulado: ${U.money(g.costs)}</div><div class="row">${co.hasResearch('Marketing') ? '<button class="btn small" data-a="mk">Campaña</button>' : ''}<button class="btn small danger" data-a="trash">Cancelar</button></div>`;
+    } else if (G.currentEngineDev) { const E = G.currentEngineDev; const p = Math.round(100 * (1 - E.remainingPoints / E.total)); h = `<h3>Nueva línea: ${this.esc(E.name)}</h3><div class="sub">Puntos de taller restantes: ${E.remainingPoints} / ${E.total}</div><div class="bar"><div style="width:${p}%"></div></div>`; }
+    else if (G.currentContract && G.currentContract.type === 'generic') { const c = G.currentContract; const left = Math.max(0, c.deadlineWeek - co.currentWeek); h = `<h3>Encargo: ${this.esc(c.name)}</h3><div class="sub">${this.esc(c.desc)}</div><div class="counters"><span class="pt d">D ${c.spawnedD}/${c.requiredD}</span><span class="pt t">T ${c.spawnedT}/${c.requiredT}</span></div><div class="sub">Plazo: ${left.toFixed(1)} semanas · Pago ${U.money(c.payment)}</div>`; }
+    else if (G.currentContract && G.currentContract.type === 'gameContract') { const c = G.currentContract; h = `<h3>Acuerdo con ${this.esc(c.publisher)}</h3><div class="sub">Crea la colección acordada (${this.esc(c.name)}). Puntuación mínima ${c.minScore}.</div><div class="row"><button class="btn small" data-a="newgame">Crear colección</button></div>`; }
+    else h = `<h3>Sin proyecto</h3><div class="sub">Haz clic en el mostrador o en <b>Nueva colección</b> (tecla N) para empezar a diseñar monturas.</div>${co.researchPoints > 0 && co.researchEnabled ? `<div class="sub">Tienes ${U.num(co.researchPoints)} puntos de investigación sin usar (tecla I).</div>` : ''}` + (() => { const nl = G.nextLevelInfo(); return nl ? `<div class="note">Siguiente local: <b>${nl.name}</b> (${U.shortMoney(nl.cost)}). ${nl.ok ? '¡Ya cumples los requisitos! Menú ☰ → Local y mudanza (tecla L).' : 'Falta: ' + nl.reasons.join(', ') + '.'}</div>` : ''; })();
+    if (!this.setHTML(el, h)) return; el.querySelectorAll('button[data-a]').forEach(b => b.addEventListener('click', () => { if (b.dataset.a === 'mk') this.showMarketing(); if (b.dataset.a === 'trash') this.confirmTrash(); if (b.dataset.a === 'newgame') this.showNewGame(G.currentContract); }));
+   this.localizeNumbers(el); },
+  updateSales() {
+    const co = G.company; if (!co) return; const el = this.$('#salesCards'); const active = co.gameLog.filter(g => !g.soldOut).slice(-6).reverse();
+    if (!active.length) { this.setHTML(el, '<div class="sub">Ninguna colección a la venta.</div>'); return; }
+    if (!this.setHTML(el, active.map(g => { const log = g.salesCashLog.slice(-12); const mx = Math.max(1, ...log); const cf = g.flags.counterfeit; return `<div class="card" data-g="${g.id}" title="Ver ficha de la colección"><div class="ctitle"><img class="gthumb" alt="" src="${Scene.previewURL(g.topic, g.genre)}">${this.esc(g.title)} <span class="score s${Math.round(g.score)}">${g.score.toFixed(1)}</span></div><div class="bars">${log.map(v => `<i style="height:${Math.max(3, 100 * v / mx)}%"></i>`).join('')}</div><div class="sub">${U.money(g.revenue)} · ${U.num(g.unitsSold)} uds${g.currentSalesRank > 0 ? ' · #' + g.currentSalesRank : ''}${g.flags.royaltyRate ? ' · royalties' : ''}${cf ? ` · <span title="Falsificaciones en el mercado${cf.applied !== undefined ? ': ventas −' + Math.round(cf.applied * 100) + ' %' : ''}">🏴‍☠️ copias${cf.decision === 'denounce' ? ' (denunciadas)' : ''}</span>` : ''}</div></div>`; }).join(''))) return;
+   el.querySelectorAll('.card[data-g]').forEach(c => c.addEventListener('click', () => { if (this.busy()) return; const g = co.gameLog.find(x => x.id === c.dataset.g); if (g) this.showCollection(g); }));
+   this.localizeNumbers(el); },
+  updateLog() { const el = this.$('#logList'); if (!el) return; if (this.setHTML(el, G.unreadLog.slice(-25).reverse().map(l => { const d = U.dateFromWeek(l.week); return `<div class="logitem"><span>${U.MONTHS[d.month - 1].slice(0, 3)} ${U.realYear(d.year)}</span> ${this.esc(l.text)}</div>`; }).join(''))) this.localizeNumbers(el); },
+
+  /* ---------- acciones ---------- */
+  action(a) {
+    if (this.busy()) return;
+    const co = G.company; if (!co) return;
+    if (a === 'newgame') { if (G.currentContract && G.currentContract.type === 'gameContract' && !co.currentGame) return this.showNewGame(G.currentContract); if (!G.isIdle()) return this.toast('Ya hay un proyecto en marcha'); if (!co.staff.some(s => s.isAvailable())) { const busyS = co.staff.filter(s => !s.isAvailable()).map(s => `${this.esc(s.name)} (${s.currentResearch ? 'investigando' : s.state === 'training' ? 'en formación' : s.state === 'vacation' ? 'de vacaciones' : s.assignment ? 'en ' + this.esc((Modules.get(s.assignment) || {}).name || s.assignment) : 'ocupado/a'})`).join(', '); return this.modal({ title: 'No hay nadie libre', body: `<p>Ahora mismo no hay nadie para diseñar: ${busyS}.</p><p>La colección avanzará sin puntos de diseño ni de técnica hasta que alguien quede libre. ¿Empezar igualmente?</p>`, buttons: [{ label: 'Empezar igualmente', onClick: () => this.showNewGame() }, { label: 'Esperar', primary: true }] }); } return this.showNewGame(); }
+    if (a === 'research') { if (!co.researchEnabled) return this.toast('La investigación se desbloquea tras lanzar tu primera colección'); return this.showResearch(); }
+    if (a === 'taller') { if (!co.researchEnabled) return this.toast('Disponible tras la primera colección'); return this.showTaller(); }
+    if (a === 'staff') return this.showStaff(); if (a === 'contracts') { if (!co.contractsEnabled) return this.toast('Los encargos llegan tras tres colecciones'); return this.showContracts(); }
+    if (a === 'marketing') { if (!co.currentGame) return this.toast('Solo durante el desarrollo de una colección'); if (!co.hasResearch('Marketing')) return this.toast('Investiga Marketing primero'); return this.showMarketing(); }
+    if (a === 'channels') return this.showChannels(); if (a === 'history') return this.showHistory(); if (a === 'help') return this.showHelp();
+  },
+  onSceneClick(h, e) {
+    if (this.busy()) return;
+    if (G.modalOpen) return; if (h.type === 'staff') return this.showStaffDetail(h.staff); if (h.type === 'dept' || h.type === 'station') return this.showDepartment(h.dept);
+    if (h.type === 'counter') { const items = [['Nueva colección', 'newgame'], ['Investigar', 'research'], ['Taller', 'taller'], ['Personal', 'staff'], ['Encargos', 'contracts'], ['Canales', 'channels'], ['Historial', 'history']]; this.contextMenu(e.clientX, e.clientY, items.map(i => ({ label: i[0], onClick: () => this.action(i[1]) }))); }
+  },
+  contextMenu(x, y, items) { const old = this.$('#ctx'); if (old) old.remove(); const m = document.createElement('div'); m.id = 'ctx'; m.style.left = x + 'px'; m.style.top = y + 'px'; items.forEach(i => { const b = document.createElement('button'); b.textContent = i.label; b.addEventListener('click', () => { m.remove(); i.onClick(); }); m.appendChild(b); }); document.body.appendChild(m); setTimeout(() => document.addEventListener('click', () => m.remove(), { once: true }), 10); },
+
+  /* ---------- notificaciones ---------- */
+  showNotification(n) {
+    if (n.sourceId === 'reviews' && n.game) return this.reviewsInterlude(n.game);
+    if (n.sourceId === 'report') return this.showReportOffer(n);
+    if (n.sourceId === 'tired') { const ids = (n.staffIds || []).filter(id => G.company.staff.some(s => s.id === id && s.state !== 'vacation')); if (!ids.length) return G.closeNotification(n, 1); n.staffIds = ids; n.text = G.tiredText(ids); }
+    if (n.sourceId === 'hire' || n.sourceId === 'openDept') { G.closeNotification(n, 0); if (n.sourceId === 'openDept') this.showDepartment(n.dept); return; }
+    const buttons = n.options ? n.options.map((o, i) => ({ label: o, primary: i === 0, onClick: () => G.closeNotification(n, i) })) : [{ label: n.type === 'tutorial' ? 'Entendido' : 'OK', primary: true, onClick: () => G.closeNotification(n, 0) }];
+    this.modal({ title: this.esc(n.header), closable: false, cls: n.type === 'tutorial' ? 'tutorial' : '', body: `<p class="ntext">${this.esc(n.text).replace(/\n/g, '<br>')}</p>`, buttons });
+  },
+
+  /* ---------- nueva colección ---------- */
+  showNewGame(contract) {
+    const co = G.company; if (!G.isIdle() && !(contract && G.currentContract === contract)) return;
+    const sizes = co.availableSizes(); const genres = co.availableGenres(); const plats = Platforms.onMarket(Math.floor(co.currentWeek)); const canAud = co.canSetTargetAudience(); const multi = co.hasResearch('MultiPlatform'); const multiG = co.hasResearch('MultiGenre');
+    const sel = { title: 'Colección ' + (co.gameLog.length + 1), size: contract && contract.size ? contract.size : 'small', topic: contract && contract.topic ? contract.topic : null, genre: contract && contract.genre ? contract.genre : null, secondGenre: null, targetAudience: canAud ? (contract && contract.audience ? contract.audience : 'everyone') : null, platforms: contract && contract.platform ? [contract.platform] : [], engine: co.engines[co.engines.length - 1].id, sequelTo: contract && contract.sequelTo ? contract.sequelTo : null };
+    const last = co.flags.lastNewGame; if (last && !contract) { if (sizes.includes(last.size)) sel.size = last.size; if (canAud && last.targetAudience) sel.targetAudience = last.targetAudience; const okPl = (last.platforms || []).filter(p => plats.some(x => x.id === p)); if (okPl.length) sel.platforms = multi ? okPl.slice(0, 3) : okPl.slice(0, 1); if (co.engines.some(e => e.id === last.engine)) sel.engine = last.engine; }
+    if (sel.sequelTo) { const s = co.gameLog.find(x => x.id === sel.sequelTo); sel.topic = s.topic; sel.genre = s.genre; sel.secondGenre = s.secondGenre; sel.title = s.title + ' II'; }
+    const lock = k => contract && contract[k];
+    let body = `
+      <div class="wiz">
+        <label>Nombre <input id="wTitle" value="${this.esc(sel.title)}" maxlength="28"></label>
+        <div class="wrow"><div><div class="wl">Tamaño</div><div class="grid" id="wSize">${sizes.map(s => `<button data-v="${s}" class="sel ${s === sel.size ? 'on' : ''} ${lock('size') ? 'lock' : ''}">${C.SIZE[s].label}<small>equipo óptimo ${C.SIZE[s].optimalTeam}</small></button>`).join('')}</div></div>
+        ${canAud ? `<div><div class="wl">Público</div><div class="grid" id="wAud">${DATA.AUDIENCES.map(a => `<button data-v="${a.id}" class="sel ${a.id === sel.targetAudience ? 'on' : ''} ${lock('audience') ? 'lock' : ''}">${a.name}</button>`).join('')}</div></div>` : ''}</div>
+        <div class="wl">Estilo</div><div class="grid topics" id="wTopic">${co.topics.map(t => `<button data-v="${t}" title="${this.esc(DB.topic(t).desc || '')}" class="sel ${t === sel.topic ? 'on' : ''} ${lock('topic') || sel.sequelTo ? 'lock' : ''}">${DB.topic(t).name}</button>`).join('')}</div>
+        <div class="wl">Tipo${multiG ? ' <small>(clic para principal, segundo clic para secundario)</small>' : ''}</div><div class="grid" id="wGenre">${genres.map(g => `<button data-v="${g.id}" class="sel ${g.id === sel.genre ? 'on' : ''} ${lock('genre') || sel.sequelTo ? 'lock' : ''}">${g.icon} ${g.name}</button>`).join('')}</div>
+        <div class="wl">Canal de venta${multi ? ' <small>(hasta 3)</small>' : ''}</div><div class="plist" id="wPlat">${plats.map(p => { const lic = co.licencedPlatforms.includes(p.id); return `<button data-v="${p.id}" class="sel ${sel.platforms.includes(p.id) ? 'on' : ''} ${lock('platform') ? 'lock' : ''}"><b>${p.name}</b><small>${p.company} · cuota ${Platforms.sharePercent(p, Math.floor(co.currentWeek)).toFixed(0)} % · ${lic ? 'licencia OK' : 'licencia ' + U.shortMoney(p.licencePrize)} · coste ${U.shortMoney(p.devCost)}</small></button>`; }).join('')}</div>
+        <div class="wrow"><label>Línea de producción <select id="wEngine">${co.engines.map(e => `<option value="${e.id}" ${e.id === sel.engine ? 'selected' : ''}>${this.esc(e.name)} (${e.parts.length} tecnologías)</option>`).join('')}</select></label><div class="wprev" title="Así sería una montura de la colección: la forma depende del estilo y el color y las lentes, del tipo"><canvas id="wPrev" width="380" height="172"></canvas><small id="wPrevTxt"></small></div><div class="cost" id="wCost"></div></div>
+        ${contract ? `<div class="note">Acuerdo con ${this.esc(contract.publisher)}: puntuación mínima ${contract.minScore}. Los campos bloqueados vienen fijados por el contrato.</div>` : ''}
+      </div>`;
+    if (contract) { const tp = G.tutorialInline('firstPublisher', { publisher: contract.publisher }); if (tp) body = `<div class="tutorial-box"><b>📘 ${this.esc(tp.header)}</b>${this.esc(tp.text)}</div>` + body; }
+    const m = this.modal({ title: sel.sequelTo ? 'Segunda edición' : 'Nueva colección', wide: true, closable: !contract, body, buttons: [{ label: 'Empezar desarrollo', primary: true, keep: true, onClick: () => { sel.title = m.querySelector('#wTitle').value.trim() || sel.title; sel.engine = m.querySelector('#wEngine').value; if (!sel.topic || !sel.genre || !sel.platforms.length) { this.toast('Elige estilo, tipo y al menos un canal'); return false; } if (!G.canSpend(cost())) { this.toast('No tienes dinero suficiente (ni con el descubierto del banco)'); return false; } if (contract) sel.contractId = contract.id; else co.flags.lastNewGame = { size: sel.size, targetAudience: sel.targetAudience, platforms: sel.platforms.slice(), engine: sel.engine }; G.createGame(sel); this.closeModal(); } }, ...(contract ? [{ label: `Rechazar (penalización ${U.shortMoney(contract.penalty || 0)})`, cls: 'danger', onClick: () => { this.modal({ title: 'Rechazar acuerdo', closable: false, body: `<p>Si rechazas ahora, ${this.esc(contract.publisher || 'el distribuidor')} nos cobra la penalización: <b>${U.money(contract.penalty || 0)}</b>.</p>`, buttons: [{ label: 'Sí, rechazar', cls: 'danger', onClick: () => { G.finishPublisherContract(false); } }, { label: 'Volver al asistente', primary: true, onClick: () => this.showNewGame(contract) }] }); } }] : [])] });
+    const cost = () => { let c = 0; for (const pid of sel.platforms) { const p = DB.platform(pid); if (!co.licencedPlatforms.includes(pid)) c += p.licencePrize; c += p.devCost; } return c; };
+    /* conocimiento de los informes: calidad de la combinación estilo/tipo ya descubierta */
+    const comboNote = () => { const K = (co.knowledge && co.knowledge._combos) || {}; if (!sel.topic || !sel.genre) return ''; const w = K[sel.topic + '|' + sel.genre]; return w === undefined ? '<br><small>Combinación estilo/tipo: sin datos (los informes de colección la revelan).</small>' : `<br><small>Combinación ${this.esc(DB.topic(sel.topic).name)} + ${this.esc(DB.genre(sel.genre).name)}: <b>${G.comboAdjective(w)}</b> según nuestros informes.</small>`; };
+    const refreshPrev = () => { const cv = m.querySelector('#wPrev'); if (!cv || typeof Scene === 'undefined') return; Scene.drawFramePreview(cv, sel.topic, sel.genre); const t = m.querySelector('#wPrevTxt'); if (t) t.textContent = sel.topic ? DB.topic(sel.topic).name + (sel.genre ? ' · ' + DB.genre(sel.genre).name : '') : ''; };
+    const refreshCost = () => { refreshPrev(); const auth = sel.genre === 'graduado' && !co.hasResearch('AutorizacionSanitaria') ? `<div class="note warn">Sin autorización sanitaria, las gafas graduadas se venden a la mitad en Tienda y Mercadillos (la nota no cambia). ${co.level >= 2 ? 'Investiga «Autorización sanitaria y registro».' : 'Hace falta un local comercial para registrarse.'}</div>` : ''; m.querySelector('#wCost').innerHTML = `Coste inicial: <b>${U.money(cost())}</b><br><small>Las tecnologías se eligen en cada fase y tienen coste propio.</small>${comboNote()}${auth}${warns()}`; };
+    /* avisos antes de pagar: caja, equipo, repetición y segundas ediciones demasiado pronto */
+    const warns = () => { const out = []; const c = cost(), after = co.cash - c, fixed = General.monthlyCosts(co);
+      if (!G.canSpend(c)) out.push(`No llega la caja: faltan ${U.money(c - co.cash - G.overdraftLimit())} incluso con el descubierto del banco.`);
+      else if (after < 0) out.push(`Pagarlo nos deja en descubierto (${U.money(after)}). Los gastos fijos son ${U.money(fixed)} al mes: vigila el aviso del banco.`);
+      else if (after < fixed * 2) out.push(`Tras pagar quedan ${U.money(after)}, menos de dos meses de gastos fijos (${U.money(fixed)}/mes).`);
+      const team = co.staff.filter(x => !x.assignment).length, opt = C.SIZE[sel.size].optimalTeam; if (opt > 1 && team < opt) out.push(`Equipo de diseño: ${team} de ${opt} recomendados para una colección ${C.SIZE[sel.size].label.toLowerCase()}. Irá más despacio y con menos puntos.`);
+      const last = co.gameLog[co.gameLog.length - 1]; if (last && sel.topic && sel.genre && last.topic === sel.topic && last.genre === sel.genre && (last.secondGenre || null) === (sel.secondGenre || null)) out.push(`La última colección también fue ${this.esc(DB.topic(sel.topic).name)} + ${this.esc(DB.genre(sel.genre).name)}: la prensa castiga repetir la misma combinación.`);
+      if (sel.sequelTo) { const o = co.gameLog.find(x => x.id === sel.sequelTo); if (o && o.releaseWeek > co.currentWeek - 40) out.push(`${this.esc(o.title)} salió hace ${Math.max(0, Math.floor(co.currentWeek - o.releaseWeek))} semanas: si la segunda edición sale antes de que pasen 40, la prensa le baja la nota y no trae clientes nuevos.`); }
+      return out.map(t => `<div class="note warn">⚠️ ${t}</div>`).join(''); };
+    const bind = (id, key, multiSel) => { const box = m.querySelector(id); if (!box) return; box.querySelectorAll('button').forEach(b => b.addEventListener('click', () => { if (b.classList.contains('lock')) return; const v = b.dataset.v; if (key === 'genre' && multiG) { if (sel.genre === v) { sel.genre = sel.secondGenre; sel.secondGenre = null; } else if (sel.secondGenre === v) sel.secondGenre = null; else if (!sel.genre) sel.genre = v; else if (!sel.secondGenre && sel.genre !== v) sel.secondGenre = v; else { sel.secondGenre = sel.genre; sel.genre = v; } box.querySelectorAll('button').forEach(x => { x.classList.toggle('on', x.dataset.v === sel.genre); x.classList.toggle('on2', x.dataset.v === sel.secondGenre); }); refreshCost(); return; } if (multiSel) { if (sel.platforms.includes(v)) sel.platforms = sel.platforms.filter(x => x !== v); else { if (!multi) sel.platforms = []; if (sel.platforms.length < 3) sel.platforms.push(v); } box.querySelectorAll('button').forEach(x => x.classList.toggle('on', sel.platforms.includes(x.dataset.v))); refreshCost(); return; } sel[key] = v; box.querySelectorAll('button').forEach(x => x.classList.toggle('on', x.dataset.v === v)); refreshCost(); })); };
+    bind('#wSize', 'size'); bind('#wAud', 'targetAudience'); bind('#wTopic', 'topic'); bind('#wGenre', 'genre'); bind('#wPlat', 'platforms', true); refreshCost();
+  },
+  confirmTrash() { this.modal({ title: 'Cancelar colección', body: '<p>¿Seguro que quieres cancelar la colección en desarrollo? Perderás el trabajo y el dinero invertido.</p>', buttons: [{ label: 'Sí, cancelar', cls: 'danger', onClick: () => G.trashGame() }, { label: 'No', primary: true }] }); },
+
+  /* ---------- sliders por fase ---------- */
+  showSliders(stage) {
+    const co = G.company; const g = co.currentGame; if (!g) return; const st = DATA.STAGES[stage - 1]; const eng = co.engines.find(e => e.id === g.engine);
+    const prev = (this.lastSliders && this.lastSliders[g.genre] && this.lastSliders[g.genre][stage - 1]) || g.sliders[stage - 1]; const vals = prev.slice();
+    const cats = st.missions.map(m => m.id); const parts = eng.parts.map(DB.part).filter(p => cats.includes(p.category)); const chosen = new Set(parts.filter(p => (p.v <= 2)).map(p => p.id));
+    /* responsables por campo (featureResponsibility de GDT): solo con ≥2 personas en la colección */
+    const team = G.collectionTeam(); const respOn = G.isStaffResponsibilityEnabled(g); const fr = g.flags.featureResponsibility || {}; const resp = {};
+    st.missions.forEach(mm => { const id = fr[mm.id]; resp[mm.id] = (id !== undefined && id !== null && team.some(s => String(s.id) === String(id))) ? String(id) : ''; });
+    const tips = [G.tutorialInline('firstSliders'), respOn ? G.tutorialInline('responsibility') : null].filter(Boolean);
+    const body = `${tips.map(t => `<div class="tutorial-box"><b>📘 ${this.esc(t.header)}</b>${this.esc(t.text).replace(/\n/g, '<br>')}</div>`).join('')}
+      <div class="sub">Reparte el tiempo de esta fase entre los tres campos. Lo que destaques definirá el carácter de la colección: cada tipo de gafa agradece unas cosas más que otras.${(co.reports || []).length ? ' Las marcas junto a cada campo resumen lo aprendido en los informes (☆ importante · = media · ✕ poco útil · ? desconocido).' : ''}</div>
+      <div class="sliders">${st.missions.map((m, i) => `<div class="srow"><div class="sname"><b>${m.name}${this.knowledgeMarkHtml(g, m.id)}${this.levelBadgeHtml(m.id)}</b><small>${m.desc}</small>${respOn ? `<div class="resp">Responsable${this.responsibleSelectHtml(m, team, resp[m.id])}</div>` : ''}</div><input type="range" min="0" max="100" value="${Math.round(vals[i])}" data-i="${i}"><div class="spct" id="pct${i}"></div></div>`).join('')}</div>
+      ${respOn ? `<div class="wl">Carga de trabajo del equipo <small>(100 % = equilibrada; por encima rinde peor y salen más defectos)</small></div><div class="wlist" id="wlist"></div>` : ''}
+      ${parts.length ? `<div class="wl">Tecnologías del taller para esta fase</div><div class="feats">${parts.map(p => `<label class="feat"><input type="checkbox" data-p="${p.id}" ${chosen.has(p.id) ? 'checked' : ''}> ${p.name} <small>${U.shortMoney(Research.devCost(p, g) * General.multiPlatformCost(g))}</small></label>`).join('')}</div><div class="cost" id="fcost"></div>` : ''}`;
+    const m = this.modal({ title: `${this.esc(g.title)} — ${st.name}`, wide: true, closable: false, body, buttons: [{ label: 'Continuar', primary: true, keep: true, onClick: () => { const feats = [...m.querySelectorAll('input[data-p]:checked')].map(x => x.dataset.p); const c = feats.reduce((s, f) => s + Research.devCost(DB.part(f), g) * General.multiPlatformCost(g), 0); if (!G.canSpend(c)) { this.toast('No puedes pagar esas tecnologías: desmarca alguna para continuar'); return false; } this.lastSliders = this.lastSliders || {}; this.lastSliders[g.genre] = this.lastSliders[g.genre] || [null, null, null]; this.lastSliders[g.genre][stage - 1] = vals.slice(); this.closeModal(true); G.setSliders(stage, vals, feats, respOn ? resp : null); this.updateProject(); } }, { label: 'Cancelar colección', cls: 'danger', keep: true, onClick: () => { this.modal({ title: 'Cancelar colección', closable: false, body: '<p>¿Seguro que quieres cancelar la colección en desarrollo? Perderás el trabajo y el dinero invertido.</p>', buttons: [{ label: 'Sí, cancelar', cls: 'danger', onClick: () => { this.closeModal(true); G.modalOpen = false; G.trashGame(); G.paused = G.userPaused || false; this.toast('Colección cancelada'); this.updateProject(); } }, { label: 'No, seguir', primary: true, onClick: () => this.showSliders(stage) }] }); } }] });
+    const updWl = () => { const el = m.querySelector('#wlist'); if (!el) return; el.innerHTML = this.workloadListHtml(g, st, team, resp, vals); };
+    const upd = () => { const sum = vals.reduce((a, b) => a + b, 0) || 1; vals.forEach((v, i) => m.querySelector('#pct' + i).textContent = Math.round(100 * v / sum) + ' %'); const c = [...m.querySelectorAll('input[data-p]:checked')].reduce((s, x) => s + Research.devCost(DB.part(x.dataset.p), g) * General.multiPlatformCost(g), 0); const fc = m.querySelector('#fcost'); if (fc) fc.innerHTML = `Coste de tecnologías: <b>${U.money(c)}</b>`; updWl(); };
+    m.querySelectorAll('input[type=range]').forEach(r => r.addEventListener('input', () => { vals[+r.dataset.i] = +r.value; upd(); })); m.querySelectorAll('input[data-p]').forEach(x => x.addEventListener('change', upd));
+    m.querySelectorAll('select[data-r]').forEach(sel => sel.addEventListener('change', () => { resp[sel.dataset.r] = sel.value; updWl(); })); upd();
+  },
+  /* ---- piezas puras (devuelven HTML) del diálogo de sliders: marcas de conocimiento, desplegable de responsable y carga de trabajo ---- */
+  knowledgeMarkHtml(g, missionId) { const k = G.knowledgeMark(G.company, g, missionId); return `<span class="kmark ${k.mark === '+' ? 'good' : k.mark === '-' ? 'bad' : k.mark ? 'mid' : ''}" title="${this.esc(k.label)}">${k.sym}</span>`; },
+  /* nivel de experiencia de un campo o tecnología (la experiencia sube los puntos que genera: +5 % por nivel) */
+  levelBadgeHtml(id) { const f = G.fieldLevel(id); return `<span class="lvl" title="Experiencia del equipo en este campo: nivel ${f.level}, ${Math.round(100 * f.progress)} % hacia el siguiente. Cada nivel añade un 5 % a los puntos.">nv. ${f.level}</span>`; },
+  /* experiencia ganada en la colección (pantalla de experiencia de GDT): campos, tecnologías y bonificaciones */
+  xpHtml(g) {
+    const co = G.company; const L = g && g.flags && g.flags.xpLog; if (!L || !L.missions) return '';
+    const rows = DATA.MISSIONS.filter(m => L.missions[m.id]).map(m => { const xp = co.missionXp[m.id] || 0, gain = L.missions[m.id]; const lv = Level.getLevel(xp), lv0 = Level.getLevel(Math.max(0, xp - gain)); return `<div class="xp-item"><b>${m.name}</b> <small>nivel ${lv}${lv > lv0 ? ' <span class="up">↑ sube de nivel</span>' : ''}</small><div class="bar thin"><div style="width:${Math.round(100 * Level.progress(xp))}%"></div></div><small>+${Math.round(gain)} XP</small></div>`; });
+    if (!rows.length) return '';
+    const feats = Object.keys(L.features || {}).map(id => DB.part(id)).filter(Boolean).map(p => `${this.esc(p.name)} nv. ${Level.getLevel(co.featureXp[p.id] || 0)} (+${Math.round(L.features[p.id])})`);
+    const bonus = (L.bonus || []).map(b => `<span class="kmark good" title="+${Math.round(100 * b.bonus)} % de experiencia en esta colección">${this.esc(b.label)} +${Math.round(100 * b.bonus)} %</span>`).join(' ');
+    return `<div class="wl">Experiencia ganada ${bonus}</div><div class="xp-list">${rows.join('')}</div>${feats.length ? `<div class="sub">Tecnologías: ${feats.join(' · ')}</div>` : ''}`;
+  },
+  responsibleSelectHtml(m, team, current) { return `<select data-r="${m.id}"><option value="">Todo el equipo</option>${team.map(s => `<option value="${s.id}" ${String(current) === String(s.id) ? 'selected' : ''}>${this.esc(s.name)} · D ${Math.floor(500 * s.designFactor)} / T ${Math.floor(500 * s.technologyFactor)}${s.flags.expert === m.id ? ' · ★ especialista' : ''}</option>`).join('')}</select>`; },
+  workloadListHtml(g, st, team, resp, vals) {
+    const sum = vals.reduce((a, b) => a + b, 0) || 1;
+    return team.map(s => { const extra = {}; const fields = []; st.missions.forEach((mm, i) => { if (resp[mm.id] === String(s.id)) { extra[mm.id] = vals[i] / sum * 100; fields.push(mm.name.split(' ')[0]); } }); const wl = General.projectedWorkload(s, g, extra); const cls = wl > 130 ? 'over' : wl > 100 ? 'warn' : '';
+      return `<div class="wl-item ${cls}"><b>${this.esc(s.name)}</b> <small>${fields.length ? 'lidera ' + fields.join(', ') : 'sin campos en esta fase'}</small><div class="bar thin"><div style="width:${Math.min(100, wl / 2)}%"></div></div><small>Carga ${Math.round(wl)} %${s.flags.expert && DB.mission(s.flags.expert) ? ' · <span class="spec">★ ' + DB.mission(s.flags.expert).name + '</span>' : ''}${s.isOnFire() ? ' · <span class="fire">🔥 en racha</span>' : ''}</small></div>`; }).join('');
+  },
+
+  /* ---------- reseñas ---------- */
+  /* ---------- visuales explicativos: desglose de la nota y curva de ventas ---------- */
+  breakdownHtml(g) {
+    const b = g.flags && g.flags.breakdown; if (!b) return '';
+    const rows = b.rows.map(r => { const pct = Math.round((r.f - 1) * 100); const w = Math.min(100, Math.abs(pct) * 2); const cls = pct >= 0 ? 'pos' : 'neg';
+      const rd = g.flags.reportData || {}; const nm = ids => (ids || []).map(id => (DB.mission(id) || { name: id }).name).join(', ');
+      const det = r.k === 'time' ? [rd.good && rd.good.length ? '✔ bien: ' + nm(rd.good) : '', rd.forgot && rd.forgot.length ? '✖ olvidado: ' + nm(rd.forgot) : '', rd.odd && rd.odd.length ? '✖ sobra tiempo en: ' + nm(rd.odd) : '', !(rd.good || []).length ? 'ningún campo clave del tipo recibió al menos el 40 % de su fase' : ''].filter(Boolean).join(' · ') : r.k === 'balance' ? (rd.balance === 'moreDesign' ? 'faltó diseño' : rd.balance === 'moreTech' ? 'faltó técnica' : rd.balance === 'ok' ? 'equilibrio ideal' : '') : '';
+      return `<div class="bd-row"><span class="bd-lbl">${this.esc(r.label)}${det ? `<small>${this.esc(det)}</small>` : ''}</span><span class="bd-bar"><i class="${cls}" style="width:${w}%"></i></span><b class="bd-val ${cls}">${pct > 0 ? '+' : ''}${pct} %</b></div>`; }).join('');
+    const adj = b.adjust && Math.abs(b.adjust) >= 0.3 ? `<div class="sub">Ajuste de la crítica: ${b.adjust > 0 ? '+' : ''}${b.adjust.toFixed(1)} (en los primeros años y tras un éxito la crítica se lo piensa antes de dar notas altas).</div>` : '';
+    return `<div class="bd"><div class="bd-head"><span>¿Por qué esta nota?</span><span>Nota base <b>${b.base.toFixed(1)}</b> → nota de la colección <b class="score s${Math.round(g.score)}">${g.score.toFixed(1)}</b></span></div>
+      <div class="sub">La nota base sale de los puntos de diseño y técnica comparados con tu listón (tu mejor colección hasta ahora). Cada línea la sube o la baja. Las revistas parten de la parte entera de la nota de la colección (${g.score.toFixed(1)} → ${g.score >= 9.5 ? 10 : Math.max(1, Math.floor(g.score))}) y cada una suma o resta hasta un punto según su criterio.</div>
+      ${rows || '<div class="sub">Sin modificadores: la nota es la de los puntos.</div>'}${adj}</div>`;
+  },
+  salesChartSvg(g, w = 860, h = 170) {
+    const d = (g.salesCashLog || []).slice(); if (!d.length) return '<div class="sub">Todavía no hay semanas de ventas.</div>';
+    const mx = Math.max(1, ...d), n = d.length, pad = 28, iw = w - pad - 8, ih = h - 30; const x = i => pad + (n === 1 ? iw / 2 : i * iw / (n - 1)), y = v => 8 + ih - ih * v / mx;
+    const pts = d.map((v, i) => `${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(' '); const area = `${pad},${8 + ih} ${pts} ${x(n - 1).toFixed(1)},${8 + ih}`;
+    const peak = d.indexOf(mx); const total = d.reduce((a, b) => a + b, 0);
+    return `<svg class="schart" viewBox="0 0 ${w} ${h}" width="100%" role="img" aria-label="Ventas semanales">
+      <line x1="${pad}" y1="${8 + ih}" x2="${w - 8}" y2="${8 + ih}" class="ax"/><line x1="${pad}" y1="8" x2="${pad}" y2="${8 + ih}" class="ax"/>
+      <polygon points="${area}" class="ar"/><polyline points="${pts}" class="ln"/>
+      <circle cx="${x(peak).toFixed(1)}" cy="${y(mx).toFixed(1)}" r="4" class="pk"/><text x="${Math.min(w - 120, x(peak) + 6).toFixed(1)}" y="${Math.max(18, y(mx) - 6).toFixed(1)}" class="tx">pico ${this.esc(U.shortMoney(mx))}/sem</text>
+      <text x="${pad}" y="${h - 6}" class="tx">semana 1</text><text x="${w - 8}" y="${h - 6}" class="tx" text-anchor="end">semana ${n} · total ${this.esc(U.shortMoney(total))}</text></svg>`;
+  },
+  showCollection(g, back) {
+    const plats = (g.platforms || []).map(id => (DB.platform(id) || { name: id }).name).join(', '); const rep = (G.company.reports || []).find(r => r.gameId === g.id);
+    const body = `<canvas class="cprev" width="240" height="110"></canvas><div class="sub">${this.esc(DB.topic(g.topic).name)} · ${this.esc(DB.genre(g.genre).name)} · ${C.SIZE[g.size].label} · ${this.esc(plats)} · lanzada en ${U.shortDate(g.releaseWeek)}${g.soldOut ? ' · retirada' : ' · a la venta'}</div>
+      <h4>Ventas semana a semana</h4>${this.salesChartSvg(g)}
+      <div class="sub center">${U.num(g.unitsSold || 0)} monturas · ingresos ${U.money(g.revenue || 0)} · coste ${U.money(g.costs || 0)} · resultado <b>${U.money((g.revenue || 0) - (g.costs || 0))}</b></div>
+      ${this.breakdownHtml(g)}
+      ${rep ? `<h4>Informe</h4>${this.reportHtml(rep)}` : ''}`;
+    this.modal({ title: `👓 ${this.esc(g.title)} <span class="score s${Math.round(g.score)}">${g.score.toFixed(1)}</span>`, wide: true, body, buttons: [{ label: back ? 'Volver' : 'Cerrar', primary: true, onClick: () => { if (back) back(); } }], onOpen: mm => { const cv = mm.querySelector('.cprev'); if (cv && typeof Scene !== 'undefined') Scene.drawFramePreview(cv, g.topic, g.genre); } });
+  },
+  /* ---------- banner animado sobre la escena (avisos importantes sin bloquear con una ventana) ---------- */
+  banner(html, ms = 1600, cls = '') {
+    const host = this.$('#scene') || document.body; let b = this.$('#banner'); if (!b) { b = document.createElement('div'); b.id = 'banner'; host.appendChild(b); }
+    b.className = 'banner ' + cls; b.innerHTML = html; void b.offsetWidth; b.classList.add('in');
+    clearTimeout(this._bannerT); this._bannerT = setTimeout(() => b.classList.remove('in'), ms);
+  },
+  /* lanzamiento → «ya en las tiendas» → «llegan las reseñas» → reseñas una a una (como en Game Dev Tycoon) */
+  newsBanner(n) {
+    this._bq = this._bq || []; const same = this._bq.find(x => x.header === n.header); if (same) same.text = `${same.text}\n${n.text}`; else this._bq.push(n); if (this._bqBusy) return;
+    const next = () => { const x = this._bq.shift(); if (!x) { this._bqBusy = false; return; } this._bqBusy = true; const txt = String(x.text || ''); const ms = U.clamp(1800 + txt.length * 28, 2600, 6500);
+      if (!this.interlude) if (typeof Sound !== 'undefined') Sound.play(x.sound || 'chime');
+      if (!this.interlude) this.banner(`<span class="bi">${x.icon || '📣'}</span><div><b>${this.esc(x.header || 'Noticias')}</b><small>${this.esc(txt).replace(/\n/g, '<br>')}</small></div>`, ms, 'news');
+      setTimeout(next, ms + 450); };
+    next();
+  },
+  reviewsInterlude(g) {
+if (typeof Sound !== 'undefined') Sound.play('launch'); this.interlude = true; G.paused = true; if (typeof Scene !== 'undefined' && Scene.addFloater) Scene.addFloater('¡Lanzada!', '#F47A20');
+    let ico = '🚀'; try { const cv = document.createElement('canvas'); cv.width = 160; cv.height = 72; Scene.drawFramePreview(cv, g.topic, g.genre); ico = `<img class="bimg" alt="" src="${cv.toDataURL()}">`; } catch (e) { /* sin vista previa */ }
+    this.banner(`<span class="bi">${ico}</span><div><b>¡${this.esc(g.title)} ya está en las tiendas!</b><small>${this.esc(DB.topic(g.topic).name)} · ${this.esc(DB.genre(g.genre).name)} · ${(g.platforms || []).map(id => this.esc((DB.platform(id) || { name: id }).name)).join(', ')}</small></div>`, 1500, 'launch');
+    setTimeout(() => { this.banner('<span class="bi">📰</span><div><b>Llegan las primeras reseñas…</b><small>Las revistas del sector ya tienen la colección en sus manos.</small></div>', 1300, 'press'); if (typeof Sound !== 'undefined') Sound.play('press'); }, 1700);
+    setTimeout(() => { this.interlude = false; this.showReviews(g); }, 3100);
+  },
+  showReviews(g) {
+    const tip = G.tutorialInline('firstReviews'); const avg = U.avg(g.reviews.map(r => r.score)); const body = `${tip ? `<div class="tutorial-box"><b>📘 ${this.esc(tip.header)}</b>${this.esc(tip.text).replace(/\n/g, '<br>')}</div>` : ''}<div class="reviews seq">${g.reviews.map((r, i) => `<div class="review" style="animation-delay:${0.35 + i * 0.8}s"><div class="rname">${r.reviewerName}</div><div class="rscore s${r.score}" style="animation-delay:${0.75 + i * 0.8}s">${r.score}</div><div class="rmsg">${this.esc(r.message)}</div></div>`).join('')}</div>
+      <div class="rv-after" style="animation-delay:${0.6 + g.reviews.length * 0.8}s"><div class="rv-avg">Media de la crítica <span class="score s${Math.round(avg)}">${avg.toFixed(1)}</span></div>
+      <div class="sub center">Diseño ${Math.floor(g.designPoints)} · Técnica ${Math.floor(g.technologyPoints)} · Defectos ${Math.floor(g.bugs)} · Expectación ${Math.floor(g.hypePoints)} · Coste ${U.money(g.costs)}</div>
+      ${this.breakdownHtml(g)}
+      ${this.xpHtml(g)}</div>`;
+    let shown = false; const m = this.modal({ title: `📰 Reseñas de ${this.esc(g.title)}`, wide: true, closable: false, body, buttons: [{ label: 'OK', primary: true, onClick: mm => { if (!shown) { shown = true; mm.classList.add('revealed'); return false; } G.closeNotification({}, 0); } }] });
+    const tm = g.reviews.map((r, i) => setTimeout(() => { if (!shown) if (typeof Sound !== 'undefined') Sound.play('review', r.score); }, (0.75 + i * 0.8) * 1000));
+    tm.push(setTimeout(() => { shown = true; tm.length = 0; if (typeof Sound !== 'undefined') Sound.play(avg >= 8 ? 'good' : avg < 5 ? 'bad' : 'chime'); }, (0.9 + g.reviews.length * 0.8) * 1000));
+    m.querySelector('.mfoot .btn').addEventListener('click', () => { if (tm.length) { tm.forEach(clearTimeout); tm.length = 0; if (typeof Sound !== 'undefined') Sound.play(avg >= 8 ? 'good' : avg < 5 ? 'bad' : 'chime'); } }, true);
+  },
+
+  /* ---------- investigación ---------- */
+  showResearch() {
+    const co = G.company; const idle = co.staff.filter(s => s.isIdle()); const ry = U.realYear(co.getCurrentDate().year); const topicsNext = co.topicOrder.filter(t => (DB.topic(t).year || 0) <= ry && !co.topics.includes(t) && !co.staff.some(s => s.currentResearch && s.currentResearch.topicId === t)).slice(0, C.TOPICS_VISIBLE);
+    const items = co.availableResearch.filter(id => id !== 'NewTopic').map(DB.item);
+    const staffSel = `<select id="rStaff">${idle.map(s => `<option value="${s.id}">${this.esc(s.name)} (I ${Math.floor(500 * s.researchFactor)})</option>`).join('')}</select>`;
+    const row = (it, topicId) => { const pc = Research.pointsCost(it), cost = Research.researchCost(it), w = (Research.duration(it) / WEEK_MS).toFixed(1); const can = co.researchPoints >= pc && co.cash >= cost && idle.length; const name = (topicId ? 'Estilo: ' + DB.topic(topicId).name : it.name) + (it.big ? ' <small class="tag">Proyecto I+D</small>' : ''); const desc = topicId ? this.esc((DB.topic(topicId).desc || 'Nuevo estilo de montura para tus colecciones.') + (DB.topic(topicId).year > 1995 ? ` En el mercado desde ${DB.topic(topicId).year}.` : '')) : (it.desc || (it.category && DB.mission(it.category) ? 'Tecnología del taller · ' + DB.mission(it.category).name : (it.category || ''))); return `<div class="ritem ${can ? '' : 'off'}"><div><b>${name}</b><small>${desc}</small></div><div class="rcost"><span class="${co.researchPoints < pc ? 'kpi-bad' : ''}">🔬 ${pc}</span>${cost ? ' · ' + U.shortMoney(cost) : ''}<br><small>${w} sem.</small></div><button class="btn small ${can ? 'primary' : ''}" data-r="${it.id}" data-t="${topicId || ''}" ${can ? '' : 'disabled'} title="${can ? '' : (co.researchPoints < pc ? 'Faltan ' + (pc - co.researchPoints) + ' puntos de investigación' : co.cash < cost ? 'No hay dinero suficiente' : 'No hay nadie libre para investigar')}">${it.big ? 'Lanzar proyecto' : 'Investigar'}</button></div>`; };
+    const groups = {}; for (const it of items) { const k = it.category && DB.mission(it.category) ? 'Taller: ' + DB.mission(it.category).name : (it.category || 'General'); (groups[k] = groups[k] || []).push(it); }
+    const body = `<div class="row between"><div>Puntos de investigación: <b>${U.num(co.researchPoints)}</b></div><div>Investigador/a: ${idle.length ? staffSel : '<i>nadie libre</i>'}</div></div>
+      <h4>Estilos nuevos</h4>${topicsNext.length ? topicsNext.map(t => row(DB.research('NewTopic'), t)).join('') : '<div class="sub">Dominas todos los estilos que existen hoy. Cada enero pueden aparecer estilos nuevos.</div>'}
+      ${Object.keys(groups).map(k => `<h4>${k}</h4>${groups[k].map(it => row(it)).join('')}`).join('')}
+      ${!items.length ? '<div class="sub">No hay más investigaciones disponibles ahora mismo. Irán apareciendo con la experiencia del equipo y con el tiempo.</div>' : ''}
+      ${this.labStatusHtml(co)}`;
+    const m = this.modal({ title: 'Investigación', wide: true, body, buttons: [{ label: 'Cerrar' }] });
+    m.querySelectorAll('button[data-r]').forEach(b => b.addEventListener('click', () => { const st = co.staff.find(s => String(s.id) === m.querySelector('#rStaff').value); if (!st) return; if (G.startResearch(b.dataset.r, st, b.dataset.t || undefined)) { this.toast('Investigación iniciada'); this.showResearch(); } }));
+  },
+  /* estado del Laboratorio I+D (proyectos grandes, marca propia y canales propios) */
+  labStatusHtml(co) {
+    const big = (Research.bigProjects || []); const done = big.filter(b => co.hasResearch(b.id)); const inProg = co.staff.filter(s => s.currentResearch && big.some(b => b.id === s.currentResearch.id));
+    if (co.level < 4 && !done.length) return '';
+    if (!done.length && !inProg.length) return `<h4>Laboratorio I+D</h4><div class="note">En la óptica insignia puedes montar un laboratorio de I+D (proyecto «Laboratorio I+D», 🔬 300 y 2 M €). Sus proyectos grandes (marca propia de lentes, probador virtual propio, suscripción de gafas…) desbloquean canales de venta propios.</div>`;
+    const own = (co.ownPlatforms || []).map(p => `${p.name} (cuota ${Platforms.sharePercent(DB.platform(p.id) || p, Math.floor(co.currentWeek)).toFixed(1)} %)`);
+    const next = big.filter(b => !co.hasResearch(b.id) && !co.availableResearch.includes(b.id) && !inProg.some(s => s.currentResearch.id === b.id)).slice(0, 2);
+    return `<h4>Laboratorio I+D</h4><div class="note">Proyectos completados: ${done.length ? done.map(b => `<b>${b.name}</b>`).join(', ') : 'ninguno'}.${inProg.length ? ` En marcha: ${inProg.map(s => `${this.esc(s.name)} → ${DB.research(s.currentResearch.id).name} (${Math.round(100 * s.currentResearch.progress)} %)`).join(', ')}.` : ''}${own.length ? `<br>Canales propios: ${own.join(' · ')} — su cuota crece con los clientes fieles (${U.num(co.fans)}).` : ''}${co.flags.ownLensBrand ? '<br>Marca propia de lentes: +8 % de ventas en Graduado, Lectura e Infantil y +15 de expectación por colección.' : ''}${co.flags.ownFrameBrand ? '<br>Marca propia de monturas: +30 de expectación por colección.' : ''}${co.flags.subscription ? `<br>Suscripción de gafas: ingreso mensual ≈ ${U.money(Math.min(2e6, Math.floor(co.fans * 0.4)))}.` : ''}${next.length ? `<br><small>Próximos proyectos: ${next.map(b => b.name).join(', ')} (aparecen al cumplir sus requisitos).</small>` : ''}</div>`;
+  },
+
+  /* ---------- taller ---------- */
+  showTaller() {
+    const co = G.company; const can = co.canDevelopEngine(); const avail = DATA.PARTS.filter(p => p.start || co.researchCompleted.includes(p.id)); const idle = co.staff.filter(s => s.isIdle());
+    const body = `<h4>Líneas de producción</h4>${co.engines.map(e => `<div class="ritem"><div><b>${this.esc(e.name)}</b><small>${e.parts.map(p => DB.part(p).name).join(', ')}</small></div></div>`).join('')}
+      ${G.currentEngineDev ? `<div class="note">Línea en desarrollo: ${this.esc(G.currentEngineDev.name)} (${G.currentEngineDev.remainingPoints} puntos restantes).</div>` : ''}
+      ${can && !G.currentEngineDev && G.isIdle() ? `<h4>Nueva línea de producción</h4><label>Nombre <input id="eName" value="Taller v${co.engines.length + 1}" maxlength="24"></label>
+        <div class="feats">${avail.map(p => `<label class="feat"><input type="checkbox" data-p="${p.id}" ${p.start ? 'checked' : ''}> ${p.name} <small>${DB.mission(p.category).name} · ${U.shortMoney(Research.engineCost(p))} · ${Research.enginePoints(p)} pts</small></label>`).join('')}</div>
+        <div class="wl">Equipo</div><div class="feats">${idle.map(s => `<label class="feat"><input type="checkbox" data-s="${s.id}" checked> ${this.esc(s.name)}</label>`).join('')}</div><div class="cost" id="eCost"></div>` : (!can ? '<div class="sub">Investiga «Taller propio» para diseñar líneas de producción con tus tecnologías.</div>' : '')}`;
+    const m = this.modal({ title: 'Líneas de producción', wide: true, body, buttons: can && !G.currentEngineDev && G.isIdle() ? [{ label: 'Crear línea', primary: true, keep: true, onClick: () => { const parts = [...m.querySelectorAll('input[data-p]:checked')].map(x => x.dataset.p); const staff = [...m.querySelectorAll('input[data-s]:checked')].map(x => x.dataset.s); if (!parts.length || !staff.length) { this.toast('Elige tecnologías y personal'); return false; } if (!G.startEngine(m.querySelector('#eName').value.trim() || 'Taller', parts, staff.map(s => isNaN(+s) ? s : +s))) { this.toast('No hay dinero suficiente'); return false; } this.closeModal(); } }, { label: 'Cerrar' }] : [{ label: 'Cerrar' }] });
+    const upd = () => { const parts = [...m.querySelectorAll('input[data-p]:checked')].map(x => DB.part(x.dataset.p)); const c = parts.reduce((s, p) => s + Research.engineCost(p), 0), pts = parts.reduce((s, p) => s + Research.enginePoints(p), 0); const el = m.querySelector('#eCost'); if (el) el.innerHTML = `Coste: <b>${U.money(c)}</b> · Puntos de taller necesarios: <b>${pts}</b>`; };
+    m.querySelectorAll('input[data-p]').forEach(x => x.addEventListener('change', upd)); upd();
+  },
+
+  /* ---------- personal ---------- */
+  showStaff() {
+    const co = G.company; const canHire = co.staff.length < co.maxStaff;
+    const stateLabel = s => s.assignment ? 'en ' + ((Modules.get(s.assignment) || {}).name || s.assignment) : ({ idle: 'libre', working: 'trabajando', researching: 'investigando', training: 'en formación', vacation: 'de vacaciones' }[s.state] || s.state);
+    const card = s => `<div class="scard ${s.id === 0 ? 'you' : ''}"><div class="savatar"><img alt="" src="${Scene.portrait(s)}"></div><div class="sinfo"><b>${this.esc(s.name)}</b>${s.isOnFire() ? ' <span class="fire" title="En racha: ×' + (s.flags.boostFactor || 1.25) + ' esta semana">🔥</span>' : ''} <small>${this.esc(s.roleInfo().name)} · nivel ${s.level()}${s.id === 0 ? ' · tú' : ''}${s.flags.expert && DB.mission(s.flags.expert) ? ' · <span class="spec" title="Especialista">★ ' + this.esc(DB.mission(s.flags.expert).name) + '</span>' : ''}</small><div class="stats"><span class="pt d">D ${Math.floor(500 * s.designFactor)}</span><span class="pt t">T ${Math.floor(500 * s.technologyFactor)}</span><span class="pt v">Vel ${Math.floor(500 * s.speedFactor)}</span><span class="pt r">I ${Math.floor(500 * s.researchFactor)}</span></div><small>${stateLabel(s)} · rendimiento ${Math.round(s.efficiency * 100)} %${s.salary ? ' · ' + U.shortMoney(s.salary) + '/mes' : ''}${s.flags.needsVacation ? ' · <b class="warn">necesita vacaciones</b>' : ''}</small></div><div class="sact"><button class="btn small" data-d="${s.id}">Detalles</button></div></div>`;
+    let hireHtml = '';
+    const roleOpts = DATA.ROLES.map(r => `<option value="${r.id}" title="${this.esc((r.titulo || '') + ' · ' + r.desc)}">${r.name}</option>`).join('');
+    if (co.level < 2 && co.staff.length >= co.maxStaff) hireHtml = '<div class="sub">En el puesto del mercado solo cabe un ayudante. Para ampliar la plantilla hace falta el local comercial (menú ☰ → Local y mudanza, tecla L).</div>';
+    else if (G.candidates) hireHtml = `<h4>Candidatos (${this.esc(DATA.roleById(G.hireSearch ? G.hireSearch.role : (G.candidates[0] && G.candidates[0].role)).name)})</h4>${G.candidates.map((a, i) => `<div class="scard"><div class="savatar"><img alt="" src="${Scene.portrait(a)}"></div><div class="sinfo"><b>${this.esc(a.name)}</b> <small>${this.esc(DATA.roleById(a.role).name)} · nivel ${Math.floor(5 * a.qualityFactor)}</small><small class="mini">🎓 ${this.esc(DATA.roleById(a.role).titulo || '')}</small><div class="stats"><span class="pt d">D ${Math.floor(500 * a.designFactor)}</span><span class="pt t">T ${Math.floor(500 * a.technologyFactor)}</span><span class="pt v">Vel ${Math.floor(500 * a.speedFactor)}</span><span class="pt r">I ${Math.floor(500 * a.researchFactor)}</span></div><small>Salario ${U.money(a.salary)}/mes · gastos fijos ${U.shortMoney(General.monthlyCosts(co))} → <b>${U.shortMoney(General.monthlyCosts(co) + a.salary)}</b>/mes</small></div><div class="sact"><button class="btn small primary" data-h="${i}" ${canHire ? '' : `disabled title="Plantilla completa (${co.staff.length}/${co.maxStaff}): múdate a un local más grande"`}>Contratar</button></div></div>`).join('')}<div class="row"><button class="btn small" id="discardCand">Descartar candidatos</button></div>`;
+    else if (G.hireSearch) hireHtml = `<div class="note">Buscando ${this.esc(DATA.roleById(G.hireSearch.role).name.toLowerCase())}… los candidatos llegarán en ${Math.max(0, G.hireSearch.targetWeek - co.currentWeek).toFixed(1)} semanas.</div>`;
+    else if (canHire) hireHtml = (co.level < 2 ? '<div class="note">En el puesto solo se hacen colecciones pequeñas, cuyo equipo ideal es una persona: un ayudante reparte el mismo trabajo y cobra sueldo. Compensa a partir de las colecciones medianas.</div>' : '') + `<h4>Buscar personal (${co.staff.length}/${co.maxStaff} puestos)</h4><div class="row"><label>Puesto <select id="hRole">${roleOpts}</select></label><label>Presupuesto <input type="range" id="hBudget" min="0" max="100" value="20"> <b id="hCost"></b></label><label>Perfil <select id="hTest"><option value="auto">Según el puesto</option><option value="design">Diseño</option><option value="tech">Técnico</option><option value="balanced">Equilibrado</option></select></label><button class="btn primary small" id="hGo">Buscar</button></div><div class="sub" id="hRoleDesc"></div><div class="sub">Más presupuesto atrae candidatos mejores (y más caros).</div>`;
+    else hireHtml = `<div class="sub">No quedan puestos libres (${co.staff.length}/${co.maxStaff}).</div>`;
+    const m = this.modal({ title: 'Personal', wide: true, body: co.staff.map(card).join('') + hireHtml, buttons: [{ label: 'Cerrar' }] });
+    m.querySelectorAll('button[data-d]').forEach(b => b.addEventListener('click', () => this.showStaffDetail(co.staff.find(s => String(s.id) === b.dataset.d))));
+    m.querySelectorAll('button[data-h]').forEach(b => b.addEventListener('click', () => { if (G.hire(G.candidates[+b.dataset.h])) { this.toast('Contratado'); this.showStaff(); } }));
+    const dc = m.querySelector('#discardCand'); if (dc) dc.addEventListener('click', () => { G.candidates = null; G.hireSearch = null; this.showStaff(); });
+    const hb = m.querySelector('#hBudget'); if (hb) { const hr = m.querySelector('#hRole'); const upd = () => { m.querySelector('#hCost').textContent = U.money(10000 + hb.value / 100 * 190000); m.querySelector('#hRoleDesc').textContent = DATA.roleById(hr.value).desc; }; hb.addEventListener('input', upd); hr.addEventListener('change', upd); upd(); m.querySelector('#hGo').addEventListener('click', () => { if (G.searchStaff(hb.value / 100, m.querySelector('#hTest').value, hr.value)) { this.toast('Búsqueda iniciada'); this.showStaff(); } else this.toast('No hay dinero suficiente'); }); }
+  },
+  showStaffDetail(s) {
+    const co = G.company; const trainings = DATA.TRAINING.filter(t => t.level <= co.level || t.isVacation);
+    const depts = Modules.list.filter(mm => mm.ui); const assignSel = depts.length ? `<label>Destino <select id="sAssign"><option value="">Colecciones y encargos</option>${depts.map(d => `<option value="${d.id}" ${s.assignment === d.id ? 'selected' : ''}>${d.icon || ''} ${d.name}</option>`).join('')}</select></label>` : '';
+    const body = `<div class="sub">${this.esc(s.roleInfo().name)} — ${this.esc(s.roleInfo().desc)}</div><div class="stats big"><span class="pt d">Diseño ${Math.floor(500 * s.designFactor)}</span><span class="pt t">Técnica ${Math.floor(500 * s.technologyFactor)}</span><span class="pt v">Velocidad ${Math.floor(500 * s.speedFactor)}</span><span class="pt r">Investigación ${Math.floor(500 * s.researchFactor)}</span></div>
+      <div class="sub">Nivel ${s.level()} (${Math.round(Level.progress(s.experience) * 100)} % hacia el siguiente) · Calidad ${s.getCurrentQualityFactor().toFixed(2)} · Rendimiento ${Math.round(s.efficiency * 100)} % · Estado: ${({ idle: 'libre', working: 'trabajando', researching: 'investigando', training: 'en formación', vacation: 'de vacaciones' }[s.state] || s.state)}${s.salary ? ' · Salario ' + U.money(s.salary) + '/mes' : ''}</div>
+      ${this.staffExpertiseHtml(s)}
+      ${this.boostHtml(s)}
+      ${assignSel}
+      <h4>Formación</h4>${s.isIdle() ? '' : '<div class="sub">Mientras trabaja solo puede irse de vacaciones; los cursos, cuando esté libre.</div>'}${true ? (s.isIdle() ? trainings : trainings.filter(t => t.isVacation)).map(t => `<div class="ritem"><div><b>${t.name}</b><small>${t.isVacation ? 'Dos semanas de descanso: recupera el rendimiento.' : `+${t.dF >= 1 ? 'Diseño' : t.tF >= 1 ? 'Técnica' : t.sF >= 1 ? 'Velocidad' : 'Investigación'} · ${(t.duration / WEEK_MS).toFixed(0)} semanas`}</small></div><div class="rcost">${t.cost ? U.shortMoney(t.cost) : 'gratis'}${t.pointsCost ? ' · 🔬 ' + t.pointsCost : ''}</div><button class="btn small" data-t="${t.id}" ${co.cash >= t.cost && co.researchPoints >= t.pointsCost ? '' : `disabled title="${co.cash < t.cost ? 'Sin dinero suficiente' : 'Faltan ' + (t.pointsCost - co.researchPoints) + ' 🔬'}"`}>Empezar</button></div>`).join('') : '<div class="sub">Solo se puede formar al personal que esté libre.</div>'}`;
+    const m = this.modal({ title: `<img class="tportrait" alt="" src="${Scene.portrait(s)}">${this.esc(s.name)}`, wide: true, body, buttons: [...(s.id !== 0 ? [{ label: 'Despedir', cls: 'danger', onClick: () => { this.modal({ title: 'Despedir', body: `<p>¿Despedir a ${this.esc(s.name)}?</p>${s.currentResearch ? `<p class="warn">Está investigando «${this.esc((DB.item(s.currentResearch.id) || { name: s.currentResearch.id }).name || '')}»: se perderá lo invertido.</p>` : ''}${s.currentTraining ? '<p class="warn">Está en formación: se perderá el curso pagado.</p>' : ''}`, buttons: [{ label: 'Sí', cls: 'danger', onClick: () => { G.fire(s); } }, { label: 'No', primary: true }] }); } }] : []), { label: 'Cerrar' }] });
+    m.querySelectorAll('button[data-t]').forEach(b => b.addEventListener('click', () => { if (G.startTraining(s, DB.training(b.dataset.t))) { this.toast('Formación iniciada'); this.closeModal(); } }));
+    const sa = m.querySelector('#sAssign'); if (sa) sa.addEventListener('change', () => { if (!G.assign(s, sa.value || null)) { this.toast('Ese departamento aún no está montado: ábrelo y compra su primer nivel'); sa.value = s.assignment || ''; return; } this.toast(sa.value ? 'Asignado a ' + Modules.get(sa.value).name : 'De vuelta a las colecciones'); this.showStaffDetail(s); });
+    const sb = m.querySelector('#sBoost'); if (sb) sb.addEventListener('click', () => { if (G.activateBoost(s)) { this.toast(`🔥 ${s.name.split(' ')[0]} en racha (×${s.flags.boostFactor})`); this.showStaffDetail(s); } });
+  },
+  /* especialidad, campos liderados y racha de un empleado (featureResponsibility / expert / onFire) */
+  staffExpertiseHtml(s) {
+    const rc = s.flags.responsibilityCount || {}; const led = Object.keys(rc).filter(k => DB.mission(k)).sort((a, b) => rc[b] - rc[a]).slice(0, 4).map(k => `${DB.mission(k).name.split(' ')[0]} ×${rc[k]}`);
+    const g = G.company.currentGame; const wl = g && s.state === 'working' ? Math.round(General.getEffectiveWorkload(s, g)) : null;
+    const parts = [];
+    if (s.flags.expert && DB.mission(s.flags.expert)) parts.push(`<span class="spec">★ Especialista en ${this.esc(DB.mission(s.flags.expert).name)}</span> (+15 % al liderar ese campo)`); else if (led.length) parts.push(`Especialista tras 5 colecciones al frente del mismo campo`);
+    if (led.length) parts.push(`Campos liderados: ${led.join(', ')}`);
+    if (wl !== null && G.isStaffResponsibilityEnabled(g)) parts.push(`Carga en la colección actual: ${wl} %`);
+    if (s.isOnFire()) parts.push(`<span class="fire">🔥 En racha (×${s.flags.boostFactor || 1.25})</span>`); else if ((s.flags.streakWeeks || 0) >= 3) parts.push(`${s.flags.streakWeeks} semanas a pleno rendimiento`);
+    return parts.length ? `<div class="sub">${parts.join(' · ')}</div>` : '';
+  },
+  /* barra de carga de la racha (boost de GDT) con botón para activarla cuando está llena */
+  boostHtml(s) {
+    const charge = G.boostCharge(s); const ready = G.canBoost(s); const weeks = s.flags.streakWeeks || 0;
+    if (s.isOnFire()) return `<div class="boost ready"><span class="fire">🔥 En racha</span> · ×${s.flags.boostFactor || 1.25} hasta dentro de ${Math.max(0, (s.flags.onFire - G.gameTime) / WEEK_MS).toFixed(1)} semanas.</div>`;
+    if (s.state !== 'working' && !weeks) return '';
+    return `<div class="boost ${ready ? 'ready' : ''}"><b>Racha</b> <small>${ready ? `cargada (${weeks} semanas): ×${G.boostFactorFor(s)} si la activas ahora; cuanto más esperes, mayor el impulso (hasta ×1,5).` : `se carga trabajando a pleno rendimiento: ${weeks} de ${G.BOOST_WEEKS} semanas.`}</small><div class="bar thin"><div style="width:${Math.round(100 * charge)}%"></div></div>${ready ? '<button class="btn small primary" id="sBoost">🔥 Activar racha</button>' : ''}</div>`;
+  },
+
+  /* ---------- encargos ---------- */
+  showContracts() {
+    const co = G.company; const list = G.getContracts(); const idle = G.isIdle();
+    const body = `${!idle ? '<div class="note">Termina el proyecto actual antes de aceptar un encargo.</div>' : ''}${list.length ? list.map(c => c.type === 'generic' ? `<div class="ritem"><div><b>${this.esc(c.name)}</b> <small class="tag">${C.SIZE[c.size].label}</small><small>${this.esc(c.desc)}</small><small>Requiere <span class="pt d">D ${c.requiredD}</span> <span class="pt t">T ${c.requiredT}</span> en ${c.weeksToFinish} semanas</small></div><div class="rcost">${U.money(c.payment)}<br><small>penalización ${U.shortMoney(c.penalty)}</small></div><button class="btn small primary" data-c="${c.id}" ${idle ? '' : 'disabled title="Termina antes el proyecto en curso"'}>Aceptar</button></div>` :
+      `<div class="ritem pub"><div><b>Acuerdo: ${this.esc(c.name)}</b> <small class="tag">${this.esc(c.publisher)}</small><small>Colección ${C.SIZE[c.size].label}${c.platform ? ' para ' + DB.platform(c.platform).name : ''}${c.audience ? ' · público ' + DATA.AUDIENCES.find(a => a.id === c.audience).name : ''} · puntuación mínima <b>${c.minScore}</b></small><small>Royalties ${Math.round(c.royaltyRate * 100)} % · penalización ${U.shortMoney(c.penalty)}</small></div><div class="rcost">Anticipo<br>${U.money(c.payment)}</div><button class="btn small primary" data-c="${c.id}" ${idle ? '' : 'disabled title="Termina antes el proyecto en curso"'}>Aceptar</button></div>`).join('') : '<div class="sub">No hay encargos disponibles ahora mismo.</div>'}`;
+    const m = this.modal({ title: 'Encargos y acuerdos', wide: true, body, buttons: [{ label: 'Cerrar' }] });
+    m.querySelectorAll('button[data-c]').forEach(b => b.addEventListener('click', () => { const c = list.find(x => x.id === b.dataset.c); this.closeModal(); G.startContract(c); }));
+  },
+
+  /* ---------- marketing ---------- */
+  showMarketing() {
+    const co = G.company; const g = co.currentGame; if (!g) return;
+    const body = `<div class="sub">Expectación actual de ${this.esc(g.title)}: <b>${Math.floor(g.hypePoints)}</b>. Las campañas rinden más cerca del final del desarrollo y pierden efecto si se repiten.</div>${DATA.MARKETING.map(mk => `<div class="ritem"><div><b>${mk.name}</b><small>${mk.desc}</small></div><div class="rcost">${U.money(mk.cost)}</div><button class="btn small primary" data-m="${mk.id}" ${co.cash >= mk.cost ? '' : 'disabled title="Sin dinero suficiente"'}>Contratar</button></div>`).join('')}`;
+    const m = this.modal({ title: 'Campaña de la colección', wide: true, body, buttons: [{ label: 'Cerrar' }] });
+    m.querySelectorAll('button[data-m]').forEach(b => b.addEventListener('click', () => { if (G.applyMarketing(DATA.MARKETING.find(x => x.id === b.dataset.m))) this.showMarketing(); }));
+  },
+
+  /* ---------- canales ---------- */
+  showChannels() {
+    const co = G.company; const w = Math.floor(co.currentWeek); const plats = Platforms.onMarket(w).sort((a, b) => Platforms.marketSizeForWeek(b, w) - Platforms.marketSizeForWeek(a, w));
+    const stars = v => v >= 1 ? '★★★' : v >= 0.8 ? '★★☆' : '★☆☆';
+    const body = `<table class="tbl"><tr><th>Canal</th><th>Empresa</th><th>Cuota</th><th>Público J/T/A</th><th>Tipos</th><th>Licencia</th></tr>${plats.map(p => `<tr><td><b>${p.name}</b>${p.isCustom ? ' <small class="tag" title="Canal propio creado en el Laboratorio I+D: la cuota crece con los clientes fieles">propio</small>' : ''}</td><td>${p.company}</td><td>${Platforms.sharePercent(p, w).toFixed(1)} %${p.isCustom ? ' <small>↑ fieles</small>' : ''}</td><td>${p.aw.map(stars).join(' ')}</td><td><small>${DATA.GENRES.map((g, i) => g.icon + stars(p.gw[i]).replace(/☆/g, '')).join(' ')}</small></td><td>${co.licencedPlatforms.includes(p.id) ? '✔' : `<button class="btn small" data-l="${p.id}" ${co.cash >= p.licencePrize ? '' : 'disabled title="Sin dinero suficiente"'}>${U.shortMoney(p.licencePrize)}</button>`}</td></tr>`).join('')}</table><div class="sub">La cuota de mercado cambia con los años: los canales nacen, crecen y desaparecen.${(co.ownPlatforms || []).length ? ' Los canales propios no caducan y crecen con tus clientes fieles.' : ''}</div>`;
+    const m = this.modal({ title: 'Canales de venta', wide: true, body, buttons: [{ label: 'Cerrar' }] });
+    m.querySelectorAll('button[data-l]').forEach(b => b.addEventListener('click', () => { const p = DB.platform(b.dataset.l); co.adjustCash(-p.licencePrize, 'Licencia ' + p.name); co.licencedPlatforms.push(p.id); this.showChannels(); }));
+  },
+
+  /* ---------- historial ---------- */
+  showHistory() {
+    const co = G.company; const seq = co.hasResearch('Sequels') && G.isIdle(); const reports = co.reports || [];
+    const repBtn = g => G.canReport(g) ? `<button class="btn small primary" data-r="${g.id}" title="Generar el informe de la colección">Informe</button>` : g.flags.reportDone ? `<button class="btn small" data-rv="${g.id}">Ver informe</button>` : (g.soldOut ? '' : `<small title="Disponible al retirarse o 3 semanas tras el lanzamiento">informe pronto</small>`);
+    const body = `<div class="row between"><div class="sub">Ingresos totales: ${U.money(co.stats.totalRevenue)} · Mejor nota: ${co.stats.bestScore.toFixed(1)}</div><div><button class="btn small" id="hReports" ${reports.length ? '' : 'disabled'}>Informes (${reports.length})</button> <button class="btn small" id="hAwards" ${co.awards.length || (co.awardsHistory || []).length ? '' : 'disabled'}>Premios (${co.awards.length})</button></div></div>
+      <table class="tbl"><tr><th>Colección</th><th>Estilo / Tipo</th><th>Tamaño</th><th>Lanz.</th><th>Nota</th><th>Uds.</th><th>Ingresos</th><th title="Como en Game Dev Tycoon: tecnologías, campañas y los gastos fijos de toda la óptica (alquiler, sueldos, departamentos) durante los meses de desarrollo">Coste ⓘ</th><th></th></tr>${co.gameLog.slice().reverse().map(g => { const d = U.dateFromWeek(g.releaseWeek); return `<tr><td><a href="#" class="glink" data-g="${g.id}" title="Ver ficha: curva de ventas y desglose de la nota"><img class="gthumb" alt="" src="${Scene.previewURL(g.topic, g.genre)}"><b>${this.esc(g.title)}</b></a>${g.flags.counterfeit ? ' <span title="Falsificada">🏴‍☠️</span>' : ''}</td><td>${DB.topic(g.topic).name} / ${DB.genre(g.genre).name}</td><td>${C.SIZE[g.size].label}</td><td>${U.shortDate(g.releaseWeek)}</td><td><span class="score s${Math.round(g.score)}">${g.score.toFixed(1)}</span></td><td>${U.num(g.unitsSold)}</td><td>${U.money(g.revenue)}</td><td>${U.money(g.costs)}</td><td>${repBtn(g)} ${seq ? `<button class="btn small" data-s="${g.id}">2ª edición</button>` : ''}</td></tr>`; }).join('')}</table>
+      <div class="sub">Pulsa el nombre de una colección para ver su curva de ventas y por qué sacó esa nota. Los informes se ofrecen 3 semanas tras el lanzamiento (o al retirarse): dan puntos de investigación y pistas para las siguientes.</div>`;
+    const m = this.modal({ title: 'Historial de colecciones', wide: true, body, buttons: [{ label: 'Cerrar' }] });
+    m.querySelectorAll('button[data-s]').forEach(b => b.addEventListener('click', () => { this.closeModal(); this.showNewGame({ sequelTo: b.dataset.s }); }));
+    m.querySelectorAll('a[data-g]').forEach(a => a.addEventListener('click', e => { e.preventDefault(); const g = co.gameLog.find(x => x.id === a.dataset.g); if (g) this.showCollection(g, () => this.showHistory()); }));
+    m.querySelectorAll('button[data-r]').forEach(b => b.addEventListener('click', () => { const g = co.gameLog.find(x => x.id === b.dataset.r); const rep = g ? G.generateReport(g) : null; if (rep) this.showReport(rep, () => this.showHistory()); }));
+    m.querySelectorAll('button[data-rv]').forEach(b => b.addEventListener('click', () => { const rep = reports.find(r => r.gameId === b.dataset.rv); if (rep) this.showReport(rep, () => this.showHistory()); }));
+    const hr = m.querySelector('#hReports'); if (hr) hr.addEventListener('click', () => this.showReports()); const ha = m.querySelector('#hAwards'); if (ha) ha.addEventListener('click', () => this.showAwardsHistory());
+  },
+  /* ---------- informe de la colección (game report) ---------- */
+  reportHtml(rep) {
+    const d = U.dateFromWeek(rep.week); const gName = DB.genre(rep.genre) ? DB.genre(rep.genre).name : rep.genre;
+    return `<div class="sub">${DB.topic(rep.topic) ? DB.topic(rep.topic).name : ''} · ${gName} · Nota <span class="score s${Math.round(rep.score)}">${rep.score.toFixed(1)}</span> · ${U.num(rep.units)} monturas · ${U.money(rep.revenue)} · informe de ${U.MONTHS[d.month - 1]} de ${U.realYear(d.year)}${rep.rp ? ` · <b>+${rep.rp} 🔬</b>` : ''}</div>
+      <ol class="report-lines">${rep.lines.map(l => `<li>${this.esc(l)}</li>`).join('')}</ol>
+      ${rep.learned && rep.learned.length ? `<div class="wl">Aprendido para las colecciones ${this.esc(gName)}</div><div class="learned">${rep.learned.map(k => `<span class="kmark ${k.mark === '+' ? 'good' : k.mark === '-' ? 'bad' : 'mid'}" title="${k.mark === '+' ? 'Importante' : k.mark === '-' ? 'Poco útil' : 'Importancia media'}">${k.mark === '+' ? '☆' : k.mark === '-' ? '✕' : '='} ${this.esc(k.name)}</span>`).join('')}</div>` : ''}`;
+  },
+  showReportOffer(n) {
+    const g = G.company.gameLog.find(x => x.id === n.gameId); let done = false;
+    const finish = () => { G.closeNotification(n, 1); this.closeModal(); return false; };
+    this.modal({ title: '📋 Informe de la colección', wide: true, closable: false, body: `<p class="ntext">${this.esc(n.text)}</p>`, buttons: [
+      { label: 'Ver el informe', primary: true, keep: true, onClick: mm => { if (done) return finish(); const rep = g ? G.generateReport(g) : null; if (!rep) return finish(); done = true; const tip = G.tutorialInline('firstReport');
+        mm.querySelector('h2').innerHTML = `📋 Informe: ${this.esc(rep.title)}`; mm.querySelector('.mbody').innerHTML = (tip ? `<div class="tutorial-box"><b>📘 ${this.esc(tip.header)}</b>${this.esc(tip.text).replace(/\n/g, '<br>')}</div>` : '') + this.reportHtml(rep); this.localizeNumbers(mm);
+        const bs = mm.querySelectorAll('.mfoot .btn'); bs[0].textContent = 'Cerrar'; if (bs[1]) bs[1].remove(); return false; } },
+      { label: 'Más tarde', onClick: () => G.closeNotification(n, 1) }] });
+  },
+  showReport(rep, back) {
+    if (!rep) return; const tip = G.tutorialInline('firstReport'); this.modal({ title: `📋 Informe: ${this.esc(rep.title)}`, wide: true, body: (tip ? `<div class="tutorial-box"><b>📘 ${this.esc(tip.header)}</b>${this.esc(tip.text).replace(/\n/g, '<br>')}</div>` : '') + this.reportHtml(rep), buttons: [{ label: back ? 'Volver' : 'Cerrar', primary: true, onClick: () => { if (back) back(); } }] });
+  },
+  showReports() {
+    const co = G.company; const reps = (co.reports || []).slice().reverse();
+    const body = reps.length ? reps.map(r => `<div class="repitem"><b>${this.esc(r.title)}</b>${this.reportHtml(r)}</div>`).join('') : '<div class="sub">Todavía no hay informes. Se ofrecen unas semanas después de lanzar cada colección (y también desde el Historial).</div>';
+    this.modal({ title: `📋 Informes de colección (${reps.length})`, wide: true, body, buttons: [{ label: 'Volver', onClick: () => this.showHistory() }, { label: 'Cerrar', primary: true }] });
+  },
+  /* ---------- gala anual de los Premios del Sector (ceremonia paso a paso) ---------- */
+  awardsCategoryHtml(c, idx) {
+    const cat = c.categories[idx]; const co = G.company;
+    const nom = cat.nominees.map(n => `<div class="nom ${n.ours ? 'ours' : ''} ${n === cat.winner ? 'win' : ''}"><div><b>${this.esc(n.title)}</b><br><small>${this.esc(n.by)}${n.ours ? ' (nosotros)' : ''}</small></div><div class="trophy">${n === cat.winner ? '🏆' : ''}</div></div>`).join('');
+    const verdict = cat.ours ? `<b>¡El premio es para ${this.esc(cat.winner.title)}, de ${this.esc(co.name)}!</b> Ganamos clientes fieles y expectación para la próxima colección.` : cat.nominated ? `El premio se lo lleva ${this.esc(cat.winner.by)} con ${this.esc(cat.winner.title)}. Nuestra nominación se queda a las puertas.` : `Gana ${this.esc(cat.winner.by)} con ${this.esc(cat.winner.title)}. Este año no teníamos nominación en esta categoría.`;
+    return `<div class="gala"><div class="sub">Prismas de Oro ${U.realYear(c.year)} · categoría ${idx + 1} de ${c.categories.length}</div><div class="cat">${cat.icon} ${this.esc(cat.name)}</div><div class="sub">${this.esc(cat.desc)}</div><div class="wl">Nominados</div>${nom}<p>${verdict}</p></div>`;
+  },
+  showAwards(c, idx) {
+    if (!c || !c.categories || !c.categories.length) return; idx = idx || 0; const last = idx >= c.categories.length - 1; if (c.categories[idx].ours) setTimeout(() => { if (typeof Sound !== 'undefined') Sound.play('fanfare'); }, 250);
+    this.modal({ title: `🎖️ Gala de los Prismas de Oro ${U.realYear(c.year)}`, wide: true, closable: false, body: (idx === 0 ? (t => t ? `<div class="tutorial-box"><b>📘 ${this.esc(t.header)}</b>${this.esc(t.text)}</div>` : '')(G.tutorialInline('awards')) : '') + this.awardsCategoryHtml(c, idx), buttons: [last ? { label: c.won.length ? `Cerrar · ${c.won.length} premio${c.won.length === 1 ? '' : 's'} para casa` : 'Cerrar', primary: true } : { label: 'Siguiente categoría', primary: true, keep: true, onClick: () => { this.showAwards(c, idx + 1); return false; } }] });
+  },
+  showAwardsHistory() {
+    const co = G.company; const hist = (co.awardsHistory || []).slice().reverse(); const cats = G.AWARD_CATEGORIES;
+    const body = hist.length ? `<table class="tbl"><tr><th>Año</th>${cats.map(k => `<th title="${this.esc(k.name)}">${k.icon}</th>`).join('')}<th>Premios</th></tr>${hist.map(h => `<tr><td><b>${U.realYear(h.year)}</b></td>${cats.map(k => { const c = h.categories.find(x => x.id === k.id); return `<td>${c ? (c.ours ? '🏆 <small>' + this.esc(c.winner.title) + '</small>' : c.nominated ? '<small title="Nominados">nominados</small>' : '<small>—</small>') : ''}</td>`; }).join('')}<td>${h.won.length}</td></tr>`).join('')}</table><div class="sub">${cats.map(k => `${k.icon} ${k.name}`).join(' · ')}</div>` : (co.awards.length ? `<div class="sub">Premios ganados: ${co.awards.map(a => `${a.year}: ${this.esc(a.title)}`).join(' · ')}</div>` : '<div class="sub">Todavía no hay galas celebradas.</div>');
+    const m = this.modal({ title: `🎖️ Prismas de Oro (${co.awards.length} ganados)`, wide: true, body: body + (hist.length ? `<div class="row"><button class="btn small" id="aReplay">Volver a ver la última gala</button></div>` : ''), buttons: [{ label: 'Volver', onClick: () => this.showHistory() }, { label: 'Cerrar', primary: true }] });
+    const ar = m.querySelector('#aReplay'); if (ar) ar.addEventListener('click', () => this.showAwards(hist[0], 0));
+  },
+
+  /* ---------- feria ---------- */
+  showBooth() {
+    const co = G.company; const booths = [{ n: 'Stand pequeño (9 m²)', f: 0.3, cost: 80000, d: 'Mostrador, dos espejos y el muestrario de la colección.' }, { n: 'Stand mediano (24 m²)', f: 0.5, cost: 200000, d: 'Buena esquina del pabellón y mesas para que los ópticos se prueben las monturas.' }, { n: 'Stand grande (60 m²)', f: 1.3, cost: 500000, d: 'Isla propia en el pabellón principal, pasarela y zona de prensa.' }];
+    const m = this.modal({ title: 'IberÓptica — reserva de stand', closable: false, body: booths.map((b, i) => `<div class="ritem"><div><b>${b.n}</b><small>${b.d}</small></div><div class="rcost">${U.money(b.cost)}</div><button class="btn small primary" data-b="${i}" ${co.cash >= b.cost ? '' : 'disabled title="Sin dinero suficiente"'}>Reservar</button></div>`).join(''), buttons: [{ label: 'Este año no', onClick: () => G.closeNotification({}, 0) }] });
+    m.querySelectorAll('button[data-b]').forEach(b => b.addEventListener('click', () => { if (G.bookBooth(+b.dataset.b)) { this.toast('Stand reservado para junio'); this.closeModal(); G.closeNotification({}, 0); } }));
+  },
+
+  /* ---------- menú, ayuda, fin ---------- */
+  /* exportar / importar partida (archivo .json) */
+  exportGame() { const txt = G.exportSave(); if (!txt) return this.toast('No hay partida que exportar'); const co = G.company; const name = String((co && co.name) || 'partida').replace(/[^\w\-áéíóúñÁÉÍÓÚÑ ]/g, '').trim().replace(/\s+/g, '-') || 'partida';
+    const d = co ? co.getCurrentDate() : null; const file = `optica-tycoon-${name}${d ? '-' + U.realYear(d.year) : ''}.json`; const url = URL.createObjectURL(new Blob([txt], { type: 'application/json' })); const a = document.createElement('a'); a.href = url; a.download = file; document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 1500); this.toast('Partida exportada: ' + file); },
+  importGame() { const inp = document.createElement('input'); inp.type = 'file'; inp.accept = '.json,application/json'; inp.addEventListener('change', () => { const f = inp.files && inp.files[0]; if (!f) return; if (f.size > 8e6) return this.toast('Archivo demasiado grande'); const r = new FileReader(); r.onload = () => { const err = G.importSave(String(r.result || '')); if (err) return this.toast(err); this.closeModal(); this.setSpeed(0); this.toast('Partida importada'); }; r.readAsText(f); }); inp.click(); },
+  showMenu() {
+    if (this.busy()) return;
+    if (!G.company) return;
+    const co = G.company;
+    this.modal({ title: 'Menú', body: `<div class="menu"><button class="btn" id="mSave">Guardar partida</button><button class="btn" id="mLoad" ${G.hasSave() ? '' : 'disabled'}>Cargar partida</button><button class="btn primary" id="mLocal">Local y mudanza</button><button class="btn" id="mScore">Puntuación y logros</button><button class="btn" id="mExport" title="Descarga la partida en un archivo para seguirla en otro dispositivo">Exportar partida</button><button class="btn" id="mImport" title="Carga una partida exportada">Importar partida</button><button class="btn" id="mHelp">Ayuda</button><button class="btn" id="mTut">Tutorial: ${co.flags.tutorialOff ? 'desactivado' : 'activado'}</button><button class="btn" id="mDel" ${G.hasSave() ? '' : 'disabled'}>Borrar partida guardada</button><button class="btn danger" id="mNew">Nueva partida</button></div>`, buttons: [{ label: 'Volver' }], onOpen: m => { m.querySelector('#mSave').addEventListener('click', () => { if (G.save()) this.toast('Partida guardada'); this.closeModal(); }); m.querySelector('#mLoad').addEventListener('click', () => { if (G.load()) { this.closeModal(); this.toast('Partida cargada'); } }); m.querySelector('#mScore').addEventListener('click', () => this.showEnd(false)); m.querySelector('#mExport').addEventListener('click', () => this.exportGame()); m.querySelector('#mImport').addEventListener('click', () => this.importGame()); m.querySelector('#mLocal').addEventListener('click', () => this.showLocal()); m.querySelector('#mHelp').addEventListener('click', () => this.showHelp()); m.querySelector('#mTut').addEventListener('click', () => { co.flags.tutorialOff = !co.flags.tutorialOff; this.toast(co.flags.tutorialOff ? 'Tutorial desactivado' : 'Tutorial activado'); this.showMenu(); }); m.querySelector('#mNew').addEventListener('click', () => { this.modal({ title: 'Nueva partida', body: '<p>¿Empezar una partida nueva? La partida actual solo se conserva si está guardada.</p>', buttons: [{ label: 'Sí, empezar de cero', cls: 'danger', onClick: () => this.showStart() }, { label: 'Volver', primary: true }] }); }); m.querySelector('#mDel').addEventListener('click', () => { this.modal({ title: 'Borrar partida', body: '<p class="ntext">Se borrará la partida guardada en este navegador. ¿Seguro?</p>', buttons: [{ label: 'Sí, borrar', cls: 'danger', onClick: () => { G.deleteSave(); this.toast('Partida borrada'); } }, { label: 'No', primary: true }] }); }); } });
+  },
+  showLocal() {
+    const co = G.company; const nl = G.nextLevelInfo(); const cur = C.LEVELS[co.level];
+    const body = `<div class="help"><p>Local actual: <b>${cur.name}</b> · hasta ${cur.maxStaff} persona${cur.maxStaff > 1 ? 's' : ''} · gastos fijos ${U.money(General.monthlyCosts(co) - co.staff.reduce((a, s) => a + (s.salary || 0), 0) - Modules.sum('monthlyCost', co))}/mes.</p>
+      ${nl ? `<h4>Siguiente: ${nl.name} — ${U.money(nl.cost)}</h4><p>${nl.text}</p><p>Requisitos: caja ≥ ${U.money(nl.cash)}, ${nl.staff} persona${nl.staff > 1 ? 's' : ''} en plantilla, ${nl.games} colecciones lanzadas y ningún proyecto en marcha.</p>${nl.ok ? '<p class="kpi-ok">Cumples todos los requisitos.</p>' : '<p class="kpi-bad">Falta: ' + nl.reasons.join(', ') + '.</p>'}` : '<p>Ya tienes el local más grande.</p>'}
+      <p class="sub">Niveles: Puesto del mercado → Local comercial (contratar, colecciones medianas, tienda) → Óptica con gabinete (gabinete, taller, laboratorio, colecciones grandes) → Óptica insignia (I+D, marca propia).</p></div>`;
+    this.modal({ title: 'Local', body, buttons: [...(nl ? [{ label: `Mudarse (${U.shortMoney(nl.cost)})`, primary: true, disabled: !nl.ok, onClick: () => { G.moveToLevel(nl.level); } }] : []), { label: 'Cerrar' }] });
+  },
+  /* ---------- finanzas (como el registro de caja de GDT) ---------- */
+  showFinances() {
+    const co = G.company; if (!co) return; const nowW = Math.floor(co.currentWeek);
+    const cat = l => { l = String(l || ''); if (/^Ventas /.test(l)) return 'Ventas de colecciones'; if (/Gastos mensuales/.test(l)) return 'Gastos fijos (alquiler, sueldos, departamentos)'; if (/^Encargo|Anticipo|Penalizaci/.test(l)) return 'Encargos y distribuidores'; if (/Tecnolog|Costes de canal|Licencia/.test(l)) return 'Desarrollo de colecciones'; if (/Gabinete|pacientes|Ex[aá]men/i.test(l)) return 'Gabinete'; if (/Tienda|tienda|Lentillas/.test(l)) return 'Tienda'; if (/Laboratorio|lab|Remontaje/i.test(l)) return 'Laboratorio'; if (/Taller|taller|Molde|OEM/.test(l)) return 'Taller'; if (/Campa|Marketing|marketing|Stand|Feria|Buzoneo|Anuncios|IberÓptica|ExpoÓptica/.test(l)) return 'Marketing y ferias'; if (/Investig|Curso|Máster|Formaci/.test(l)) return 'Investigación y formación'; if (/local|Reforma|Nuevo local/i.test(l)) return 'Locales'; return 'Otros'; };
+    const months = []; for (let i = 11; i >= 0; i--) { const end = nowW - i * 4, start = end - 4; months.push({ start, end, inc: 0, exp: 0 }); }
+    const by = {}; const since = nowW - 12;
+    for (const e of co.cashLog) { const m = months.find(x => e.week > x.start && e.week <= x.end); if (m) { if (e.amount >= 0) m.inc += e.amount; else m.exp -= e.amount; } if (e.week > since) { const k = cat(e.label); by[k] = by[k] || { inc: 0, exp: 0 }; if (e.amount >= 0) by[k].inc += e.amount; else by[k].exp -= e.amount; } }
+    const mx = Math.max(1, ...months.map(m => Math.max(m.inc, m.exp)));
+    const bars = months.map(m => { const d = U.dateFromWeek(Math.max(0, m.end)); return `<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:2px"><div style="height:110px;display:flex;align-items:flex-end;gap:2px"><i title="Ingresos ${U.money(m.inc)}" style="display:block;width:9px;height:${Math.max(1, 108 * m.inc / mx)}px;background:#2faf1b;border-radius:2px 2px 0 0"></i><i title="Gastos ${U.money(m.exp)}" style="display:block;width:9px;height:${Math.max(1, 108 * m.exp / mx)}px;background:#e74c3c;border-radius:2px 2px 0 0"></i></div><small style="font-size:10px;color:#777">${d.month}/${String(U.realYear(d.year)).slice(2)}</small></div>`; }).join('');
+    const rows = Object.entries(by).sort((a, b) => (b[1].inc - b[1].exp) - (a[1].inc - a[1].exp)).map(([k, v]) => `<tr><td>${this.esc(k)}</td><td style="text-align:right;color:#229710">${v.inc ? U.money(v.inc) : '—'}</td><td style="text-align:right;color:#c0392b">${v.exp ? U.money(-v.exp) : '—'}</td><td style="text-align:right"><b>${U.money(v.inc - v.exp)}</b></td></tr>`).join('');
+    const salaries = co.staff.reduce((a, s) => a + (s.salary || 0), 0); const dep = Modules.list.map(m => ({ n: m.name, c: m.monthlyCost ? Math.round(+m.monthlyCost(co) || 0) : 0 })).filter(x => x.c > 0); const total = General.monthlyCosts(co); const rent = total - salaries - dep.reduce((a, x) => a + x.c, 0);
+    const tot = months.slice(-3).reduce((a, m) => a + m.inc - m.exp, 0);
+    const body = `<div class="row between"><div>Caja: <b>${U.money(co.cash)}</b></div><div>Resultado últimos 3 meses: <b class="${tot >= 0 ? 'kpi-ok' : 'kpi-bad'}">${U.money(tot)}</b></div><div>Descubierto permitido: ${U.money(G.overdraftLimit())}</div></div>
+      <h4>Últimos 12 meses <small class="sub">(verde ingresos · rojo gastos)</small></h4><div style="display:flex;gap:4px;background:#fff;border:1px solid var(--line);border-radius:6px;padding:8px">${bars}</div>
+      <h4>De dónde viene el dinero (últimos 3 meses)</h4><table class="tbl"><tr><th>Partida</th><th style="text-align:right">Ingresos</th><th style="text-align:right">Gastos</th><th style="text-align:right">Neto</th></tr>${rows || '<tr><td colspan="4">Sin movimientos todavía.</td></tr>'}</table>
+      <h4>Gastos fijos cada mes: ${U.money(total)}</h4><table class="tbl"><tr><td>Alquiler y suministros (${this.esc(C.LEVELS[co.level].name)})</td><td style="text-align:right">${U.money(rent)}</td></tr><tr><td>Sueldos (${co.staff.length} persona${co.staff.length === 1 ? '' : 's'})</td><td style="text-align:right">${U.money(salaries)}</td></tr>${dep.map(x => `<tr><td>${this.esc(x.n)}</td><td style="text-align:right">${U.money(x.c)}</td></tr>`).join('')}</table>`;
+    this.modal({ title: 'Finanzas', wide: true, body, buttons: [{ label: 'Cerrar' }] });
+  },
+  showHelp() {
+    this.modal({ title: 'Cómo se juega', wide: true, body: `<div class="help">
+      <p><b>Colecciones.</b> Elige estilo, tipo, público y canal. Cada estilo casa mejor con unos tipos que con otros, y cada canal y cada público prefieren ciertos tipos. Las reseñas premian las buenas combinaciones y castigan repetir la misma combinación dos veces seguidas.</p>
+      <p><b>Fases y sliders.</b> El desarrollo tiene tres fases con tres campos cada una. Repartir el tiempo hacia los campos que importan para ese tipo de gafa (por ejemplo, lentes y ergonomía en Graduado, forma y acabados en Sol) mejora la nota. Las burbujas naranjas son puntos de <b>diseño</b>, las azules de <b>técnica</b>, las verdes de <b>investigación</b> y las rojas <b>defectos</b> que se corrigen al final.</p>
+      <p><b>Equilibrio.</b> Cada tipo tiene una proporción ideal entre técnica y diseño: las deportivas y graduadas son técnicas; las de sol, lectura y premium viven del diseño.</p>
+      <p><b>Reseñas y expectativas.</b> Cuatro revistas puntúan de 1 a 10 comparando tu colección con tu mejor trabajo anterior y con lo que el mercado espera. Para seguir sacando notas altas hay que mejorar: más personal, mejores tecnologías, colecciones más grandes.</p>
+      <p><b>Ventas.</b> Dependen de la nota, los clientes fieles, la expectación (marketing, feria) y la cuota del canal elegido. Las ventas llegan semana a semana.</p>
+      <p><b>Investigación y taller.</b> Los puntos de investigación se generan trabajando. Con ellos desbloqueas estilos, colecciones medianas y grandes, marketing, el taller propio y, con experiencia en cada campo, nuevas tecnologías (materiales, lentes, acabados…) que se montan en líneas de producción.</p>
+      <p><b>Personal.</b> En el puesto cabe un ayudante (no acelera las colecciones pequeñas); en el local comercial, hasta 5 personas. Cada persona tiene diseño, técnica, velocidad e investigación; se cansa y necesita vacaciones; se forma con cursos. Las colecciones grandes necesitan equipos grandes.</p>
+      <p><b>Encargos y acuerdos.</b> Los encargos dan dinero rápido a cambio de puntos D/T en plazo. Los distribuidores pagan anticipos y multiplican las ventas, pero se quedan la mayor parte.</p>
+      <p><b>Local.</b> Puesto del mercado (tú y un ayudante) → local comercial (150.000 €, requiere 350.000 € en caja; permite contratar, colecciones medianas y tienda) → óptica con gabinete (reforma 150.000 €; gabinete, taller y laboratorio) → óptica insignia (4 M €, requiere 5 M € en caja; I+D, marca propia y colecciones insignia). Consulta y ejecuta la mudanza en Menú ☰ → Local y mudanza (tecla L). Hasta entonces, la ruta es: encadenar colecciones pequeñas, aceptar encargos cuando aparezcan (tras tres colecciones) e investigar estilos nuevos.</p>
+      <p><b>Responsables por campo.</b> Con dos o más personas en una colección, en cada fase eliges quién lidera cada campo. Su habilidad (Diseño o Técnica según el campo) marca el ritmo de todo el equipo y su carga de trabajo no debería pasar del 100 %: por encima rinde peor y salen más defectos. Tras 5 colecciones al frente del mismo campo se convierte en especialista (+15 %), algo imprescindible en las colecciones insignia.</p>
+      <p><b>Informes.</b> Cuando una colección se retira (o 3 semanas tras el lanzamiento) puedes generar su informe: pistas sobre a qué dedicar más o menos tiempo, equilibrio diseño/técnica, combinación estilo/tipo, canal y público, más algunos puntos de investigación. Lo aprendido aparece en los sliders como marcas (☆ importante, = media, ✕ poco útil, ? desconocido) y en el Historial.</p>
+      <p><b>Experiencia por campo.</b> Cada fase da experiencia al campo trabajado (y a las tecnologías usadas): cada nivel añade un 5 % a los puntos. El nivel aparece junto a cada campo en los sliders y, al terminar la colección, en la pantalla de reseñas con lo ganado y las bonificaciones (+30 % por combinación estilo/tipo nueva y +30 % por buena gestión si nadie pasó del 100 % de carga).</p>
+      <p><b>Premios, rachas y falsificaciones.</b> Cada enero se celebra la gala del sector con cinco categorías frente a otras ópticas (nota 6 o más para optar). La racha (🔥) se carga trabajando seis semanas a pleno rendimiento: puede saltar sola o activarla tú desde la ficha del empleado (+25–50 % durante una semana; cuanto más esperes, mayor el impulso). A partir de 2006, si la óptica es conocida, aparecen copias de tus colecciones: denunciar cuesta 20.000 €; ignorarlo recorta sus ventas un 5–15 %.</p>
+      <p><b>Laboratorio I+D.</b> En la óptica insignia, el proyecto «Laboratorio I+D» abre proyectos grandes: marca propia de lentes (+ventas en graduado), probador virtual propio, boutiques de marca y suscripción de gafas, que crean canales de venta propios sin licencia cuya cuota crece con los clientes fieles.</p>
+      <p><b>Logros y balance.</b> Hay 22 logros (de la primera colección a los treinta años abiertos); cada uno avisa con un banner al conseguirlo. En Menú ☰ → Puntuación y logros ves la trayectoria con fechas, la gráfica de ingresos por año y tu mejor colección. El botón 🔊 de arriba activa o silencia el sonido.</p>
+      <p><b>Controles.</b> Espacio pausa/reanuda; 1 lento (🐢, la mitad de rápido para pensar sin pausar), 2 normal, 3 rápido y 4 muy rápido. Atajos: N nueva colección, I investigar, P personal, E encargos, C canales, H historial, T líneas de producción, F finanzas, L local, M sonido, V cambiar de sala (taller, laboratorio, gabinete). Clic en el dinero para ver las finanzas; clic en el mostrador para el menú rápido; clic en una persona para su ficha; clic en una zona o en el panel Departamentos para abrir ese departamento. La partida se guarda sola cada mes.</p></div>`, buttons: [{ label: 'Cerrar' }] });
+  },
+  showEnd(final) {
+    const co = G.company; const d = co.getCurrentDate(); const score = Math.round(co.stats.totalRevenue / 1000 + co.fans / 10 + co.awards.length * 5000 + co.gameLog.reduce((s, g) => s + g.score * 100, 0));
+    const games = co.gameLog.filter(g => g.releaseWeek !== undefined); const best = games.slice().sort((a, b) => b.score - a.score)[0]; const top = games.slice().sort((a, b) => (b.unitsSold || 0) - (a.unitsSold || 0))[0];
+    /* ingresos de las colecciones por año de lanzamiento */
+    const byYear = {}; for (const g of games) { const y = U.realYear(U.dateFromWeek(g.releaseWeek).year); byYear[y] = (byYear[y] || 0) + (g.revenue || 0); }
+    const y0 = 1995, y1 = U.realYear(d.year); const years = []; for (let y = y0; y <= y1; y++) years.push(y); const mx = Math.max(1, ...years.map(y => byYear[y] || 0));
+    const chart = games.length ? `<div class="yrchart">${years.map(y => `<div class="yc" title="${y}: ${U.money(byYear[y] || 0)}"><i style="height:${Math.max(byYear[y] ? 3 : 0, 100 * (byYear[y] || 0) / mx)}%"></i><span>${(y - y0) % 5 === 0 || y === y1 ? "'" + String(y).slice(2) : ''}</span></div>`).join('')}</div>` : '';
+    const got = co.achievements || []; const gotIds = new Set(got.map(a => a.id)); const A = id => ACHIEVEMENTS.find(a => a.id === id);
+    const path = got.slice().sort((a, b) => a.week - b.week).map(x => { const a = A(x.id); if (!a) return ''; const dd = U.dateFromWeek(x.week); return `<li><span class="when">${U.MONTHS[dd.month - 1].slice(0, 3)} ${U.realYear(dd.year)}</span> ${a.icon} ${this.esc(a.name)}</li>`; }).join('');
+    const grid = ACHIEVEMENTS.map(a => `<div class="ach ${gotIds.has(a.id) ? '' : 'off'}" title="${this.esc(a.desc)}"><i>${gotIds.has(a.id) ? a.icon : '🔒'}</i><b>${this.esc(a.name)}</b><small>${this.esc(a.desc)}</small></div>`).join('');
+    const stat = (v, l) => `<div class="st"><b>${v}</b><small>${l}</small></div>`;
+    const intro = typeof final === 'string' ? final : final ? `Han pasado treinta años desde el puesto del mercado de 1995. Así ha sido la historia de <b>${this.esc(co.name)}</b> (el juego continúa):` : `Balance de <b>${this.esc(co.name)}</b> en ${U.realYear(d.year)}:`;
+    const body = `<div class="help"><p>${intro}</p>
+      <div class="endstats">${stat(co.gameLog.length, 'colecciones')}${stat(co.stats.bestScore.toFixed(1), 'mejor nota')}${stat(U.num(co.fans), 'clientes fieles')}${stat(U.shortMoney(co.stats.totalRevenue), 'ingresos')}${stat(co.awards.length, 'Prismas de Oro')}${stat(this.esc(C.LEVELS[co.level].name), co.staff.length + ' en plantilla')}</div>
+      <p class="big">Puntuación: <b>${U.num(score)}</b></p>
+      ${best ? `<div class="sub">Mejor colección: <a href="#" class="glink" data-g="${best.id}"><b>${this.esc(best.title)}</b></a> (${best.score.toFixed(1)}, ${U.realYear(U.dateFromWeek(best.releaseWeek).year)})${top && top !== best ? ` · La más vendida: <a href="#" class="glink" data-g="${top.id}"><b>${this.esc(top.title)}</b></a> (${U.num(top.unitsSold || 0)} monturas)` : ''}</div>` : ''}
+      ${chart ? `<h4>Ingresos de las colecciones por año</h4>${chart}` : ''}
+      ${path ? `<h4>Trayectoria</h4><ul class="path">${path}</ul>` : ''}
+      <h4>Logros · ${gotIds.size} de ${ACHIEVEMENTS.length}</h4><div class="achgrid">${grid}</div></div>`;
+    if (typeof final === 'string') return { body, score };
+    this.modal({ title: final ? '🎂 30 años de óptica' : '🏆 Puntuación y logros', wide: true, body, buttons: [{ label: final ? 'Seguir jugando' : 'Cerrar', primary: true }], onOpen: m => m.querySelectorAll('a[data-g]').forEach(a => a.addEventListener('click', e => { e.preventDefault(); const g = co.gameLog.find(x => x.id === a.dataset.g); if (g) this.showCollection(g, () => this.showEnd(final)); })) });
+    if (final && typeof Sound !== 'undefined') Sound.play('fanfare');
+  },
+  showGameOver() { const co = G.company; this.modal({ title: 'Bancarrota', closable: false, wide: true, body: this.showEnd(`El banco ha cerrado el grifo: <b>${this.esc(co.name)}</b> echa el cierre en ${U.MONTHS[co.getCurrentDate().month - 1]} de ${U.realYear(co.getCurrentDate().year)}, tras ${co.gameLog.length} colecciones y ${U.num(co.fans)} clientes fieles. Esta es su historia:`).body, buttons: [{ label: 'Nueva partida', primary: true, onClick: () => { this.closeModal(true); this.showStart(); return false; } }, { label: 'Cargar última partida', disabled: !G.hasSave(), onClick: () => { G.load(); this.setSpeed(1); } }], onOpen: m => m.querySelectorAll('a[data-g]').forEach(a => a.addEventListener('click', e => { e.preventDefault(); const g = co.gameLog.find(x => x.id === a.dataset.g); if (g) this.showCollection(g, () => this.showGameOver()); })) }); }
+};

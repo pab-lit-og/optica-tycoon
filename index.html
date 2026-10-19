@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Cache-Control" content="no-cache, must-revalidate">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; connect-src 'self'; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'none'">
+<meta name="referrer" content="no-referrer">
+<title>Óptica Tycoon</title>
+<meta name="description" content="Juego de gestión de una óptica, al estilo de Game Dev Tycoon">
+<meta name="theme-color" content="#262b30">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
+<meta name="apple-mobile-web-app-title" content="Óptica Tycoon">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="stylesheet" href="css/style.css?v=20261023c">
+</head>
+<body>
+<div id="app">
+  <header id="topbar">
+    <div class="brand">👓 <span id="companyName">Óptica Tycoon</span><small id="levelLabel"></small></div>
+    <div class="stat date" id="dateLabel">Enero 1995 · Sem 1</div>
+    <div class="stat cash" title="Dinero">💶 <span id="cashLabel">70.000 €</span></div>
+    <div class="stat" title="Clientes fieles">❤️ <span id="fansLabel">0</span></div>
+    <div class="stat" title="Puntos de investigación">🔬 <span id="rpLabel">0</span></div>
+    <div class="speed">
+      <button class="speedBtn" data-speed="0" title="Pausa (espacio)">⏸</button>
+      <button class="speedBtn" data-speed="0.5" title="Lento: la mitad de rápido, para pensar sin pausar (1)">🐢</button>
+      <button class="speedBtn active" data-speed="1" title="Velocidad normal (2)">▶</button>
+      <button class="speedBtn" data-speed="2" title="Rápido (3)">▶▶</button>
+      <button class="speedBtn" data-speed="4" title="Muy rápido (4)">▶▶▶</button>
+    </div>
+    <button id="btnSound" title="Sonido">🔊</button>
+    <button id="btnMenu" title="Menú">☰</button>
+  </header>
+  <div id="main">
+    <nav id="actions">
+      <button data-action="newgame" title="Diseñar una nueva colección de monturas (N)"><i>👓</i><span>Nueva colección</span></button>
+      <button data-action="research" title="Investigar estilos y tecnologías (I)"><i>🔬</i><span>Investigar</span></button>
+      <button data-action="taller" title="Líneas de producción con las tecnologías investigadas (T)"><i>⚙️</i><span>Líneas</span></button>
+      <button data-action="staff" title="Personal (P)"><i>👥</i><span>Personal</span></button>
+      <button data-action="contracts" title="Encargos y acuerdos con distribuidores (E)"><i>📋</i><span>Encargos</span></button>
+      <button data-action="marketing" title="Campaña publicitaria de la colección en desarrollo"><i>📢</i><span>Campaña</span></button>
+      <button data-action="channels" title="Canales de venta y licencias (C)"><i>🏪</i><span>Canales</span></button>
+      <button data-action="history" title="Historial de colecciones (H)"><i>📈</i><span>Historial</span></button>
+      <button data-action="help" title="Ayuda"><i>❓</i><span>Ayuda</span></button>
+    </nav>
+    <section id="scene">
+      <canvas id="canvas"></canvas>
+      <div id="trendBadge"></div>
+      <div id="viewTabs"></div>
+    </section>
+    <aside id="side">
+      <div id="projectPanel" class="panel"></div>
+      <div id="salesPanel" class="panel"><h3>Ventas</h3><div id="salesCards"></div></div>
+      <div id="deptPanel" class="panel"><h3>Departamentos</h3><div id="deptCards"></div></div>
+      <div id="logPanel" class="panel"><h3>Noticias</h3><div id="logList"></div></div>
+    </aside>
+  </div>
+</div>
+<div id="modalRoot"></div>
+<script src="js/data.js?v=20261023c"></script>
+<script src="js/modules.js?v=20261023c"></script>
+<script src="js/engine.js?v=20261023c"></script>
+<script src="js/render.js?v=20261023c"></script>
+<script src="js/sound.js?v=20261023c"></script>
+<script src="js/ui.js?v=20261023c"></script>
+<script src="js/modules/taller.js?v=20261023c"></script>
+<script src="js/modules/lab.js?v=20261023c"></script>
+<script src="js/modules/gabinete.js?v=20261023c"></script>
+<script src="js/modules/tienda.js?v=20261023c"></script>
+<script src="js/modules/marketing.js?v=20261023c"></script>
+<script src="js/modules/mundo.js?v=20261023c"></script>
+<script src="js/main.js?v=20261023c"></script>
+</body>
+</html>
