@@ -180,7 +180,7 @@ const UI = {
         <div class="wl">Estilo</div><div class="grid topics" id="wTopic">${co.topics.map(t => `<button data-v="${t}" title="${this.esc(DB.topic(t).desc || '')}" class="sel ${t === sel.topic ? 'on' : ''} ${lock('topic') || sel.sequelTo ? 'lock' : ''}">${DB.topic(t).name}</button>`).join('')}</div>
         <div class="wl">Tipo${multiG ? ' <small>(clic para principal, segundo clic para secundario)</small>' : ''}</div><div class="grid" id="wGenre">${genres.map(g => `<button data-v="${g.id}" class="sel ${g.id === sel.genre ? 'on' : ''} ${lock('genre') || sel.sequelTo ? 'lock' : ''}">${g.icon} ${g.name}</button>`).join('')}</div>
         <div class="wl">Canal de venta${multi ? ' <small>(hasta 3)</small>' : ''}</div><div class="plist" id="wPlat">${plats.map(p => { const lic = co.licencedPlatforms.includes(p.id); return `<button data-v="${p.id}" class="sel ${sel.platforms.includes(p.id) ? 'on' : ''} ${lock('platform') ? 'lock' : ''}"><b>${p.name}</b><small>${p.company} · cuota ${Platforms.sharePercent(p, Math.floor(co.currentWeek)).toFixed(0)} % · ${lic ? 'licencia OK' : 'licencia ' + U.shortMoney(p.licencePrize)} · coste ${U.shortMoney(p.devCost)}</small></button>`; }).join('')}</div>
-        <div class="wrow"><label>Línea de producción <select id="wEngine">${co.engines.map(e => `<option value="${e.id}" ${e.id === sel.engine ? 'selected' : ''}>${this.esc(e.name)} (${e.parts.length} tecnologías)</option>`).join('')}</select></label><div class="wprev" title="Así sería una montura de la colección: la forma depende del estilo y el color y las lentes, del tipo"><canvas id="wPrev" width="380" height="172"></canvas><small id="wPrevTxt"></small></div><div class="cost" id="wCost"></div></div>
+        <div class="wrow"><label>Línea de producción <select id="wEngine">${co.engines.map(e => `<option value="${e.id}" ${e.id === sel.engine ? 'selected' : ''}>${this.esc(e.name)} (${e.parts.length} tecnologías)</option>`).join('')}</select></label><div class="wprev" title="Así sería una montura de la colección: la forma sale del estilo y las lentes, del tipo (solares para sol y deportiva)"><canvas id="wPrev" width="720" height="300"></canvas><small id="wPrevTxt"></small></div><div class="cost" id="wCost"></div></div>
         ${contract ? `<div class="note">Acuerdo con ${this.esc(contract.publisher)}: puntuación mínima ${contract.minScore}. Los campos bloqueados vienen fijados por el contrato.</div>` : ''}
       </div>`;
     if (contract) { const tp = G.tutorialInline('firstPublisher', { publisher: contract.publisher }); if (tp) body = `<div class="tutorial-box"><b>📘 ${this.esc(tp.header)}</b>${this.esc(tp.text)}</div>` + body; }
@@ -270,7 +270,7 @@ const UI = {
   },
   showCollection(g, back) {
     const plats = (g.platforms || []).map(id => (DB.platform(id) || { name: id }).name).join(', '); const rep = (G.company.reports || []).find(r => r.gameId === g.id);
-    const body = `<canvas class="cprev" width="240" height="110"></canvas><div class="sub">${this.esc(DB.topic(g.topic).name)} · ${this.esc(DB.genre(g.genre).name)} · ${C.SIZE[g.size].label} · ${this.esc(plats)} · lanzada en ${U.shortDate(g.releaseWeek)}${g.soldOut ? ' · retirada' : ' · a la venta'}</div>
+    const body = `<canvas class="cprev" width="320" height="140"></canvas><div class="sub">${this.esc(DB.topic(g.topic).name)} · ${this.esc(DB.genre(g.genre).name)} · ${C.SIZE[g.size].label} · ${this.esc(plats)} · lanzada en ${U.shortDate(g.releaseWeek)}${g.soldOut ? ' · retirada' : ' · a la venta'}</div>
       <h4>Ventas semana a semana</h4>${this.salesChartSvg(g)}
       <div class="sub center">${U.num(g.unitsSold || 0)} monturas · ingresos ${U.money(g.revenue || 0)} · coste ${U.money(g.costs || 0)} · resultado <b>${U.money((g.revenue || 0) - (g.costs || 0))}</b></div>
       ${this.breakdownHtml(g)}
@@ -294,7 +294,7 @@ const UI = {
   },
   reviewsInterlude(g) {
 if (typeof Sound !== 'undefined') Sound.play('launch'); this.interlude = true; G.paused = true; if (typeof Scene !== 'undefined' && Scene.addFloater) Scene.addFloater('¡Lanzada!', '#F47A20');
-    let ico = '🚀'; try { const cv = document.createElement('canvas'); cv.width = 160; cv.height = 72; Scene.drawFramePreview(cv, g.topic, g.genre); ico = `<img class="bimg" alt="" src="${cv.toDataURL()}">`; } catch (e) { /* sin vista previa */ }
+    let ico = '🚀'; try { const u = Scene.previewURL(g.topic, g.genre); if (u) ico = `<img class="bimg" alt="" src="${u}">`; } catch (e) { /* sin vista previa */ }
     this.banner(`<span class="bi">${ico}</span><div><b>¡${this.esc(g.title)} ya está en las tiendas!</b><small>${this.esc(DB.topic(g.topic).name)} · ${this.esc(DB.genre(g.genre).name)} · ${(g.platforms || []).map(id => this.esc((DB.platform(id) || { name: id }).name)).join(', ')}</small></div>`, 1500, 'launch');
     setTimeout(() => { this.banner('<span class="bi">📰</span><div><b>Llegan las primeras reseñas…</b><small>Las revistas del sector ya tienen la colección en sus manos.</small></div>', 1300, 'press'); if (typeof Sound !== 'undefined') Sound.play('press'); }, 1700);
     setTimeout(() => { this.interlude = false; this.showReviews(g); }, 3100);

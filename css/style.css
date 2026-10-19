@@ -269,12 +269,12 @@ ul.path .when { display: inline-block; min-width: 68px; color: #7a6f5d; font-siz
 
 .tportrait { width: 34px; height: 34px; border-radius: 50%; vertical-align: middle; margin-right: 8px; box-shadow: 0 0 0 2px #fff, 0 1px 3px rgba(0,0,0,.25); }
 
-.wprev { flex: 0 0 auto; display: flex; flex-direction: column; align-items: center; background: linear-gradient(#fffdf8, #f4ecdc); border: 1px solid #e0d6c3; border-radius: 8px; padding: 4px 8px 6px; }
-.wprev canvas { width: 190px; height: 86px; }
-.wprev small { font-size: 11px; color: #7a6f5d; max-width: 190px; text-align: center; }
-.cprev { float: right; width: 120px; height: 55px; margin: -4px 0 4px 10px; background: linear-gradient(#fffdf8, #f4ecdc); border: 1px solid #e0d6c3; border-radius: 8px; }
-.banner .bimg { width: 84px; height: 38px; display: block; }
-.gthumb { width: 32px; height: 15px; vertical-align: middle; margin-right: 5px; }
+.wprev { flex: 0 0 auto; align-self: flex-start; display: flex; flex-direction: column; align-items: center; background: linear-gradient(#fffdf8, #f4ecdc); border: 1px solid #e0d6c3; border-radius: 8px; padding: 4px 8px 6px; }
+.wprev canvas { width: 300px; max-width: 100%; height: auto; aspect-ratio: 12 / 5; }
+.wprev small { font-size: 11px; color: #7a6f5d; max-width: 300px; text-align: center; }
+.cprev { float: right; width: 160px; height: 70px; margin: -4px 0 4px 10px; background: linear-gradient(#fffdf8, #f4ecdc); border: 1px solid #e0d6c3; border-radius: 8px; }
+.banner .bimg { width: 84px; height: 38px; display: block; object-fit: contain; }
+.gthumb { width: 36px; height: 15px; object-fit: contain; vertical-align: middle; margin-right: 5px; }
 
 /* pestañas de salas */
 #viewTabs { position: absolute; right: 12px; top: 12px; display: none; gap: 4px; background: rgba(43,36,32,0.82); padding: 4px; border-radius: 9px; box-shadow: 0 2px 8px rgba(0,0,0,.25); z-index: 5; }
