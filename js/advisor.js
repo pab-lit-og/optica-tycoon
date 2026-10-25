@@ -56,7 +56,7 @@ const Advisor = {
       avail.sort((a, b) => rank(a) - rank(b));
       const can = avail.filter(it => co.researchPoints >= Research.pointsCost(it) && co.cash - Research.researchCost(it) > fixed);
       const top = can[0] || null;
-      if (top) add(70 - Math.min(20, rank(top)), '🔬', `Investiga «${top.name}»`, (this.WHY[top.id] || (top.category ? 'mejora de ' + top.category.toLowerCase() + ' para tus líneas de producción' : 'te abre nuevas opciones')) + `. Cuesta ${Research.pointsCost(top)} puntos${Research.researchCost(top) ? ' y ' + U.money(Research.researchCost(top)) : ''}.`, 'research');
+      if (top) add(70 - Math.min(20, rank(top)), '🔬', `Investiga «${top.name}»`, (this.WHY[top.id] || (top.desc ? top.desc.replace(/\s*\(desde \d+\)$/, '').replace(/\.$/, '').toLowerCase() : top.category ? 'mejora de ' + top.category.toLowerCase() + ' para tus líneas de producción' : 'te abre nuevas opciones')) + `. Cuesta ${Research.pointsCost(top)} puntos${Research.researchCost(top) ? ' y ' + U.money(Research.researchCost(top)) : ''}.`, 'research');
       else if (avail.length) { const n = avail[0]; add(30, '🔬', `Siguiente investigación: «${n.name}»`, `Te faltan ${Math.max(0, Research.pointsCost(n) - Math.floor(co.researchPoints))} puntos de investigación (salen al desarrollar colecciones).`, 'research'); }
     }
     // 6. línea de producción anticuada
