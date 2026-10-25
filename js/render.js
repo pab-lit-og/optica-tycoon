@@ -100,7 +100,8 @@ const Scene = {
     const covid = (ry === 2020 && m >= 5) || ry === 2021 || (ry === 2022 && m <= 6);
     const E = { w, lvl, fk, ry, month: m, era, weather, rain: weather === 'rain' || weather === 'orballo', xmas: m === 12, sales: m === 1 || m === 7, summer: m >= 6 && m <= 8, school: m === 9, covid };
     E.tint = E.rain ? 'rgba(70,90,112,0.07)' : weather === 'sun' ? 'rgba(255,214,140,0.06)' : era === 0 ? 'rgba(255,230,170,0.05)' : null;
-    E.fkey = [era, E.xmas ? 'X' : '', E.sales ? 'R' : '', E.summer ? (E.rain ? 'S' : 'Sh') : '', E.school ? 'C' : '', covid ? 'M' : ''].join(''); // muebles (sin el tiempo)
+    E.retro = ry < 1982; /* antes de los PC: máquina de escribir en las mesas */
+    E.fkey = [era, E.retro ? 'T' : '', E.xmas ? 'X' : '', E.sales ? 'R' : '', E.summer ? (E.rain ? 'S' : 'Sh') : '', E.school ? 'C' : '', covid ? 'M' : ''].join(''); // muebles (sin el tiempo)
     E.key = weather + E.fkey;
     return (this._env = E);
   },
@@ -478,7 +479,11 @@ const Scene = {
     if (!occupied) { const m = P(0.85, 0.5, 1.5); ctx.fillStyle = 'rgba(0,0,0,0.45)'; ctx.font = `${Math.max(9, s * 0.11)}px "Segoe UI", sans-serif`; ctx.textAlign = 'center'; ctx.fillText('puesto libre', m.x, m.y); } },
   /* ordenador según la época (bu,bv = esquina del monitor sobre la mesa a altura z). Devuelve q(fu,fz) → punto de la pantalla principal (0..1) */
   drawComputer(bu, bv, z, era, on, raw, back) { const s = this.scale(); let sq; const scr = [];
-    if (era === 0) { // PC de sobremesa beige con monitor de tubo encima
+    const retro = era === 0 && this.env().retro;
+    if (retro) { // máquina de escribir con la hoja puesta (antes de 1982)
+      this.box(bu + 0.02, bv + 0.02, z, 0.56, 0.42, 0.1, '#2f4a3a', { top: '#3f5f4b', right: '#243a2d' }); this.box(bu + 0.06, bv + 0.3, z + 0.1, 0.48, 0.1, 0.06, '#1f3328', { top: '#2c4637' });
+      this.box(bu + 0.1, bv + 0.33, z + 0.16, 0.4, 0.02, 0.02, '#c9c9c9'); sq = { u0: bu + 0.14, u1: bu + 0.46, v: bv + 0.34, z0: z + 0.17, z1: z + 0.5 }; scr.push(sq); }
+    else if (era === 0) { // PC de sobremesa beige con monitor de tubo encima
       this.box(bu - 0.04, bv - 0.08, z, 0.68, 0.6, 0.12, '#d3cab2', { top: '#e4dcc8', right: '#b3aa92' }); const fl = this.iso(bu + 0.42, bv + 0.52, z + 0.06); this.ctx.fillStyle = '#6d6650'; this.ctx.fillRect(fl.x - s * 0.06, fl.y - 1, s * 0.1, 2);
       this.box(bu + 0.02, bv - 0.04, z + 0.12, 0.56, 0.48, 0.44, '#ddd4bd', { top: '#ebe5d4', right: '#bab096' }); sq = { u0: bu + 0.09, u1: bu + 0.51, v: bv + 0.445, z0: z + 0.2, z1: z + 0.5 }; scr.push(sq); }
     else if (era === 1) { // monitor plano 4:3 con marco plateado
@@ -491,6 +496,7 @@ const Scene = {
     if (back) { const ctx = this.ctx; scr.forEach(S => { const Q = mk(S); if (era === 0) { ctx.strokeStyle = 'rgba(90,80,60,0.55)'; ctx.lineWidth = 1; ctx.beginPath(); for (let i = 0; i < 4; i++) { const a = Q(0.25, 0.35 + i * 0.12), b = Q(0.75, 0.35 + i * 0.12); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); } ctx.stroke(); } else { const c = Q(0.5, 0.55); ctx.fillStyle = era === 1 ? 'rgba(255,255,255,0.55)' : 'rgba(255,255,255,0.25)'; ctx.beginPath(); ctx.ellipse(c.x, c.y, s * 0.025, s * 0.02, 0, 0, 7); ctx.fill(); } if (on) { const g = Q(0.5, 1.02); ctx.fillStyle = era >= 2 ? 'rgba(120,200,255,0.25)' : 'rgba(150,230,200,0.2)'; ctx.beginPath(); ctx.ellipse(g.x, g.y - s * 0.02, s * 0.2, s * 0.05, 0, 0, 7); ctx.fill(); } }); return q; }
     if (raw) return q;
     scr.forEach((S, n) => { const Q = mk(S); const rect = (f0, f1, g0, g1, col, line) => this.poly([Q(f0, g0), Q(f1, g0), Q(f1, g1), Q(f0, g1)], col, line);
+      if (retro) { rect(0, 1, 0, 1, '#fbf8ee', '#b9b2a0'); if (on) for (let i = 0; i < 5; i++) rect(0.12, 0.88 - (i % 3) * 0.12, 0.82 - i * 0.12, 0.86 - i * 0.12, '#7a7466'); return; }
       if (!on) { rect(0, 1, 0, 1, '#1b262e', '#111'); return; }
       if (era === 0) { rect(0, 1, 0, 1, '#0b7f7f', '#222'); rect(0.15, 0.8, 0.22, 0.82, '#c3c3c3'); rect(0.15, 0.8, 0.72, 0.82, '#0a1f8f'); rect(0.22, 0.6, 0.48, 0.54, '#7a7a7a'); rect(0.22, 0.7, 0.34, 0.4, '#7a7a7a'); }
       else if (era === 1) { rect(0, 1, 0.35, 1, '#4f93e0', '#111'); rect(0, 1, 0.08, 0.35, '#5aa83a'); rect(0, 1, 0, 0.08, '#2459c4'); rect(0, 0.18, 0, 0.08, '#3c9a3c'); rect(0.28, 0.8, 0.3, 0.84, '#f0f0f0'); rect(0.28, 0.8, 0.76, 0.84, '#2a62d8'); }
@@ -671,7 +677,8 @@ const Scene = {
     this.shadow(u, v, z.w, z.d, 0.6); this.box(u, v + 0.2, 0, 1.6, 0.8, 0.72, '#f5f5f5', { top: '#ffffff', right: '#cfcfcf' });
     // ordenador de la época con gráfica de barras animada
     const q = this.drawComputer(u + 0.45, v + 0.32, 0.72, era, true, true); const t = this.time / 1000; const rect = (f0, f1, g0, g1, col, line) => this.poly([q(f0, g0), q(f1, g0), q(f1, g1), q(f0, g1)], col, line);
-    rect(0, 1, 0, 1, era === 0 ? '#0b3d2e' : '#ff8a65', '#111'); if (era > 0) rect(0, 1, 0.55, 1, '#ffb74d'); for (let i = 0; i < 5; i++) { const h = 0.15 + 0.6 * Math.abs(Math.sin(t + i)); rect(0.08 + i * 0.18, 0.2 + i * 0.18, 0.08, 0.08 + h, era === 0 ? '#4cd137' : 'rgba(255,255,255,0.9)'); }
+    if (era === 0 && this.env().retro) { rect(0, 1, 0, 1, '#fbf8ee', '#b9b2a0'); for (let i = 0; i < 5; i++) { const h = 0.15 + 0.6 * Math.abs(Math.sin(t * 0.5 + i)); rect(0.08 + i * 0.18, 0.2 + i * 0.18, 0.08, 0.08 + h, '#7a7466'); } }
+    else { rect(0, 1, 0, 1, era === 0 ? '#0b3d2e' : '#ff8a65', '#111'); if (era > 0) rect(0, 1, 0.55, 1, '#ffb74d'); for (let i = 0; i < 5; i++) { const h = 0.15 + 0.6 * Math.abs(Math.sin(t + i)); rect(0.08 + i * 0.18, 0.2 + i * 0.18, 0.08, 0.08 + h, era === 0 ? '#4cd137' : 'rgba(255,255,255,0.9)'); } }
     if (info.campaignActive) { const m = P(0.8, 0.3, 1.5); ctx.fillStyle = '#e74c3c'; ctx.font = `bold ${Math.max(8, s * 0.1)}px sans-serif`; ctx.textAlign = 'center'; ctx.fillText('CAMPAÑA EN MARCHA', m.x, m.y); }
     ctx.fillStyle = 'rgba(40,30,20,0.75)'; ctx.font = `bold ${Math.max(8, s * 0.1)}px "Segoe UI", sans-serif`; ctx.textAlign = 'center'; const lab = P(z.w / 2, z.d + 0.2, 0); ctx.fillText('MARKETING', lab.x, lab.y + 12); },
 

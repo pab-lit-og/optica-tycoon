@@ -31,7 +31,7 @@
   const pct1 = v => (100 * v).toFixed(1) + ' %';
   const notify = (h, t, type, opts) => { if (typeof G !== 'undefined' && G.notify) G.notify(h, t, type, opts); };
   const log = t => { if (typeof G !== 'undefined' && G.log) G.log(t); };
-  const LENS_GENRES = { graduado: 1, lectura: 0.8, infantil: 1, premium: 0.5, deportiva: 0.3, sol: 0.15 };
+  const LENS_GENRES = { graduado: 1, lectura: 0.8, infantil: 1, premium: 0.5, deportiva: 0.3, sol: 0.15, inteligente: 0.6 };
   const DAYS_WEEK = 5.5;          // días de taller por semana
   const REMAKE_OWN = [0, 35, 50, 70, 70], REMAKE_EXT = 25; // € por remontaje propio según tier (lente de stock → tallada) y externo (coste medio de la investigación: 70 €)
 
@@ -130,7 +130,9 @@
     indice174: { ticket: 16, def: 1, margin: 0.02 }, mineral_alto: { ticket: 10, def: 1.5, margin: 0.015 }, semiterminados_propios: { ticket: 0, margin: 0.06 },
     uv400: { ticket: 2 }, tintado: { ticket: 4, margin: 0.005 }, ar_premium: { ticket: 18, def: -1, margin: 0.02 }, espejadas: { ticket: 6, margin: 0.005 }, antivaho: { ticket: 5, margin: 0.005 }, conduccion: { ticket: 6, margin: 0.005 }, ar_propio: { ticket: 10, margin: 0.05, def: 1 },
     monofocal_esferica: { ticket: 0 }, monofocal_asferica: { ticket: 6, margin: 0.005 }, bifocal: { ticket: 8, margin: 0.01 }, lenticular: { ticket: 6, margin: 0.01 }, base8_deportiva: { ticket: 8, margin: 0.01 },
-    ocupacional: { ticket: 12, margin: 0.015 }, monofocal_freeform: { ticket: 12, def: -1, margin: 0.015 }, freeform_personalizado: { ticket: 50, margin: 0.04 }, control_miopia: { ticket: 28, margin: 0.04 }
+    ocupacional: { ticket: 12, margin: 0.015 }, monofocal_freeform: { ticket: 12, def: -1, margin: 0.015 }, freeform_personalizado: { ticket: 50, margin: 0.04 }, control_miopia: { ticket: 28, margin: 0.04 },
+    /* futuro (2028-2042) */
+    fut_miopia2: { ticket: 32, margin: 0.045 }, fut_lc_autofoco: { ticket: 60, def: 1, margin: 0.05 }, fut_lentes_impresas: { ticket: 10, def: -1, margin: 0.04 }, fut_metalente: { ticket: 30, def: -0.5, margin: 0.05 }
   };
   const TICKET_BASE = [0, 60, 95, 110, 140];  // € de lentes por trabajo según nivel de local (antes del mix): base sobre la que el laboratorio gana margen
   const WALKIN_BASE = [0, 15, 50, 120, 230];  // trabajos/semana de mostrador según nivel (sin colecciones ni gabinete)
@@ -196,7 +198,7 @@
   const MIX_K = { ticket: 0.3, def: 0.3, margin: 0.2 }; // dilución del mix de lentes investigadas sobre ticket/defectos/margen
   const B2B = { base: 300, spare: 0.8, margin: 10, isoMargin: 2, isoDemand: 1.5, days: 22 }; // laboratorio para terceros (tier 4)
   const prov = st => PROVBY[st.provider] || PROVBY.lab_prats;
-  const weekOf = s => U.weekFromDate(s);
+  const weekOf = s => U.gameWeek(s);
 
   /* Eventos: probabilidad anual, condición y efecto (fire). Los de proveedor los ignora el tier ≥3 (independencia).
      Decisiones con sourceId 'lab:<id>' resueltas en onDecision. Basados en EVT_LAB_01..04 de la investigación de oficio. */

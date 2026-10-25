@@ -15,9 +15,15 @@ const U = {
   weekFromDate: (s) => { const p = s.split('/').map(Number); return (p[0] - 1) * 48 + (p[1] - 1) * 4 + ((p[2] || 1) - 1); },
   /* calendario real: el año 1 de la partida es 1995 */
   YEAR0: 1994, MONTHS: ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'],
-  realYear: y => y + 1994,
-  shortDate: w => { const d = U.dateFromWeek(w); return U.MONTHS[d.month - 1].slice(0, 3) + ' ' + (d.year + 1994); },
-  dateFromWeek: (w) => { w = Math.floor(w); return { year: Math.floor(w / 48) + 1, month: Math.floor((w % 48) / 4) + 1, week: (w % 4) + 1 }; },
+  /* calendario: la partida empieza en co.startYear (1965…2026). currentWeek = semanas transcurridas desde el inicio.
+     Las fechas del contenido ('a/m/s' en data.js y módulos) van en el calendario 1995 (año 1 = 1995, admite años ≤ 0 para antes). */
+  startYear: () => (typeof G !== 'undefined' && G.company && G.company.startYear) || 1995,
+  shiftWeeks: () => (U.startYear() - 1995) * 48,
+  absWeek: w => w + U.shiftWeeks(),                 /* semana transcurrida → semana del calendario 1995 */
+  gameWeek: s => U.weekFromDate(s) - U.shiftWeeks(), /* fecha de contenido → semana transcurrida de esta partida */
+  realYear: y => y + U.startYear() - 1,
+  shortDate: w => { const d = U.dateFromWeek(w); return U.MONTHS[d.month - 1].slice(0, 3) + ' ' + U.realYear(d.year); },
+  dateFromWeek: (w) => { w = Math.floor(w); const y = Math.floor(w / 48); const r = w - y * 48; return { year: y + 1, month: Math.floor(r / 4) + 1, week: (r % 4) + 1 }; },
   money: (n) => { n = Math.round(n); const s = Math.abs(n).toString().replace(/\B(?=(\d{3})+(?!\d))/g, '.'); return (n < 0 ? '-' : '') + s + ' €'; },
   shortMoney: (n) => { const a = Math.abs(n); let s; if (a >= 1e6) s = (a / 1e6).toFixed(a >= 1e7 ? 0 : 1).replace('.', ',') + ' M'; else if (a >= 1e3) s = Math.round(a / 1e3) + ' K'; else s = Math.round(a).toString(); return (n < 0 ? '-' : '') + s + ' €'; },
   num: (n) => Math.round(n).toString().replace(/\B(?=(\d{3})+(?!\d))/g, '.'),
@@ -50,7 +56,7 @@ const DB = {
 
 /* ---------- pesos de tipo / público (GameGenre, Platforms, General) ---------- */
 const W = {
-  genre(arr, g, g2) { if (!arr) return 1; if (g2) return (W.genre(arr, g2) + 2 * W.genre(arr, g)) / 3; return arr[DB.genreIndex(g)]; },
+  genre(arr, g, g2) { if (!arr) return 1; if (g2) return (W.genre(arr, g2) + 2 * W.genre(arr, g)) / 3; const v = arr[DB.genreIndex(g)]; return v === undefined ? 0.8 : v; }, /* 0,8 para vectores antiguos sin el 7.º tipo (Inteligente) */
   golden(g, g2) { if (g2) return (2 * W.golden(g) + W.golden(g2)) / 3; return DB.genre(g).goldenRatio; },
   audience(arr, a) { if (!a || !arr) return 1; return arr[DB.audienceIndex(a)]; },
   normGenre(v) { return v === 1 ? 1.1 : v === 0.9 ? 1.05 : v === 0.8 ? 1 : v === 0.7 ? 0.95 : v === 0.6 ? 0.9 : 1; },
@@ -62,9 +68,13 @@ const W = {
 
 /* ---------- canales: cuota de mercado por semana ---------- */
 const Platforms = {
-  publishWeek: p => U.weekFromDate(p.published),
+  /* since = año real desde el que existía el canal: en partidas que empiezan antes de 1995 se adelanta su apertura */
+  publishWeek: p => { const w = U.weekFromDate(p.published); if (p.since && U.startYear() < 1995) return Math.min(w, U.weekFromDate(`${p.since - 1994}/1/1`)); return w; },
   retireWeek: p => U.weekFromDate(p.retire),
-  marketSizeForWeek(p, week) {
+  marketSizeForWeek(p, week) { return Platforms.rawMarketSize(p, week) * ((G.company && G.company.marketScale) || 1); },
+  /* tamaño de mercado sin escalar (week = semana transcurrida de la partida) */
+  rawMarketSize(p, week) {
+    week = U.absWeek(week);
     if (p.isCustom) { /* canal propio (I+D): la cuota crece con los clientes fieles */ if (week < Platforms.publishWeek(p)) return 0; const fans = G.company ? G.company.fans : 0; return 5e6 * U.clamp(p.baseAmount + (p.fansScale || 0) * fans / 1e6, p.baseAmount, p.maxAmount || 6); }
     let m = week - Platforms.publishWeek(p); if (m < 0) return 0;
     let l = p.startAmount, g = p.unitsSold, n = Platforms.retireWeek(p) - Platforms.publishWeek(p);
@@ -77,7 +87,7 @@ const Platforms = {
     if (n === 0) return 5e6 * l; if (m > n) m = n;
     return 5e6 * (m / n * (g - l) + l);
   },
-  onMarket(week) { return DATA.PLATFORMS.filter(p => Platforms.publishWeek(p) <= week && Platforms.retireWeek(p) > week); },
+  onMarket(week) { week = U.absWeek(week); const past = U.startYear() < 1995; return DATA.PLATFORMS.filter(p => (past || !p.pastOnly) && Platforms.publishWeek(p) <= week && Platforms.retireWeek(p) > week); },
   totalMarket(week) { return Platforms.onMarket(week).reduce((s, p) => s + Platforms.marketSizeForWeek(p, week), 0); },
   sharePercent(p, week) { const t = Platforms.totalMarket(week); return t ? 100 * Platforms.marketSizeForWeek(p, week) / t : 0; },
 };
@@ -97,6 +107,7 @@ const Research = {
 Research.bigProjects = [
   { id: 'RnDLab', name: 'Laboratorio I+D', category: 'Laboratorio I+D', big: true, pointsCost: 300, duration: 20000, cost: 2000000, req: c => c.level >= 4, desc: 'Montamos un laboratorio de I+D en la óptica insignia: abre proyectos grandes que cambian el negocio (marca propia, canales propios, suscripción).' },
   { id: 'OwnLensBrand', name: 'Marca propia de lentes', category: 'Laboratorio I+D', big: true, pointsCost: 600, duration: 30000, cost: 5000000, req: c => c.hasResearch('RnDLab'), desc: 'Lentes con nuestra propia marca: +8 % de ventas en Graduado, Lectura e Infantil y +15 de expectación en cada colección nueva.', onComplete(co) { co.flags.ownLensBrand = true; } },
+  { id: 'GafaPropia', name: 'Plataforma de gafa propia', category: 'Laboratorio I+D', big: true, pointsCost: 1000, duration: 40000, cost: 15000000, req: c => c.hasResearch('RnDLab') && c.hasResearch('LineaInteligente') && c.isLaterOrEqualThan(37, 1), desc: 'Nuestra propia gafa inteligente con su tienda de aplicaciones (la consola propia de Game Dev Tycoon): un canal sin licencia cuya cuota crece con los clientes fieles.', onComplete(co) { G.addOwnPlatform({ id: 'gafapropia', name: 'Nuestra gafa inteligente', baseAmount: 0.8, fansScale: 2.2, maxAmount: 7, devCost: 40000, gw: [0.8, 1, 1, 0.7, 0.7, 1, 1], aw: [1, 1, 0.8] }); } },
   { id: 'OwnTryOn', name: 'Probador virtual propio', category: 'Laboratorio I+D', big: true, pointsCost: 800, duration: 35000, cost: 8000000, req: c => c.hasResearch('RnDLab') && c.isLaterOrEqualThan(14, 1), desc: 'Nuestra propia app de probador virtual: un canal de venta propio sin licencia cuya cuota de mercado crece con los clientes fieles.', onComplete(co) { G.addOwnPlatform({ id: 'probadorpropio', name: 'Probador virtual propio', baseAmount: 0.8, fansScale: 2.0, maxAmount: 5, devCost: 30000, gw: [1, 0.9, 0.9, 0.9, 0.8, 0.9], aw: [0.9, 1, 0.9] }); } },
   { id: 'OwnFrameBrand', name: 'Marca propia de monturas', category: 'Laboratorio I+D', big: true, pointsCost: 900, duration: 40000, cost: 10000000, req: c => c.hasResearch('OwnLensBrand'), desc: 'Boutiques con nuestra marca de monturas: canal propio premium y +30 de expectación en cada colección.', onComplete(co) { co.flags.ownFrameBrand = true; G.addOwnPlatform({ id: 'boutiquepropia', name: 'Boutiques de marca propia', baseAmount: 0.6, fansScale: 1.6, maxAmount: 4.5, devCost: 40000, gw: [1, 0.9, 0.7, 0.7, 0.7, 1], aw: [0.8, 0.9, 1] }); } },
   { id: 'Subscription', name: 'Suscripción de gafas', category: 'Laboratorio I+D', big: true, pointsCost: 1000, duration: 40000, cost: 12000000, req: c => c.hasResearch('OwnTryOn') && c.isLaterOrEqualThan(17, 1), desc: 'Gafas por suscripción: canal propio de recurrencia y un ingreso mensual proporcional a los clientes fieles.', onComplete(co) { co.flags.subscription = true; G.addOwnPlatform({ id: 'suscripcionpropia', name: 'Suscripción propia', baseAmount: 1.0, fansScale: 2.5, maxAmount: 6, devCost: 30000, gw: [0.9, 0.9, 0.8, 1, 0.9, 1], aw: [1, 1, 0.8] }); } }
@@ -538,8 +549,8 @@ Estilos de moda: ${era.styles.map(id => DB.topic(id) ? DB.topic(id).name : id).j
    EMPRESA (Company)
    ===================================================================== */
 class Company {
-  constructor(name, playerName) {
-    this.name = name; this.cash = C.START_CASH; this.fans = 0; this.fansChange = 0; this.researchPoints = 0; this.currentWeek = 0; this.level = 1; this.maxStaff = C.LEVELS[1].maxStaff;
+  constructor(name, playerName, startYear) {
+    this.startYear = startYear || 1995; this.name = name; this.cash = C.START_CASH; this.fans = 0; this.fansChange = 0; this.researchPoints = 0; this.currentWeek = 0; this.level = 1; this.maxStaff = C.LEVELS[1].maxStaff;
     this.staff = [new Character({ id: 0, name: playerName, dF: 0.6, tF: 0.6, speedF: 0.6, qualityF: 0.2, researchF: 0.6, salary: 0, slot: 0, sex: 'male', look: 0, role: 'optico' })];
     this.modules = {};
     this.currentGame = null; this.gameLog = []; this.cashLog = []; this.notifications = [];
@@ -548,11 +559,12 @@ class Company {
     this.researchEnabled = false; this.contractsEnabled = false; this.topicOrder = U.shuffle(DATA.TOPICS.map(t => t.id)); this.scheduledShown = []; this.awards = []; this.stats = { totalRevenue: 0, bestScore: 0 };
     /* mecánicas GDT: responsables por campo (valores por defecto), conocimiento de los informes, tutorial, informes, galas y canales propios */
     this.flags.featureResponsibility = {}; this.knowledge = {}; this.tutorialShown = []; this.reports = []; this.awardsHistory = []; this.ownPlatforms = [];
-    this.topics = this.topicOrder.filter(t => (DB.topic(t).year || 0) <= 1995).slice(0, 4);
+    this.topics = this.topicOrder.filter(t => (DB.topic(t).year || 0) <= this.startYear && !(DB.topic(t).until && DB.topic(t).until < this.startYear)).slice(0, 4);
     this.engines.push({ id: 'taller0', name: 'Taller básico', parts: DATA.PARTS.filter(p => p.start).map(p => p.id), createdWeek: 0 });
   }
   /* repara partidas antiguas: rellena los campos nuevos con valores por defecto */
   repair() {
+    if (!this.startYear) this.startYear = 1995;
     this.flags = this.flags || {}; if (!this.flags.featureResponsibility || typeof this.flags.featureResponsibility !== 'object') this.flags.featureResponsibility = {};
     if (this.flags.nextGameHypeBonus === undefined) this.flags.nextGameHypeBonus = 0;
     if (!this.knowledge || typeof this.knowledge !== 'object') this.knowledge = {};
@@ -564,7 +576,9 @@ class Company {
     return this;
   }
   getCurrentDate() { return U.dateFromWeek(this.currentWeek); }
-  isLaterOrEqualThan(y, m) { return Math.floor(this.currentWeek) >= U.weekFromDate(`${y}/${m || 1}/1`); }
+  isLaterOrEqualThan(y, m) { return Math.floor(this.currentWeek) + (this.startYear - 1995) * 48 >= U.weekFromDate(`${y}/${m || 1}/1`); }
+  realYear() { return this.getCurrentDate().year + this.startYear - 1; }
+  playedAtLeast(y, m) { return Math.floor(this.currentWeek) >= U.weekFromDate(`${y}/${m || 1}/1`); } /* tiempo jugado (hitos de progresión, como en GDT) */
   adjustCash(v, label) { if (!isFinite(v)) { console.error('adjustCash: valor no numérico', label, v); return; } this.cash += v; if (label) this.cashLog.push({ week: Math.floor(this.currentWeek), amount: v, label }); if (this.cashLog.length > 400) this.cashLog.shift(); if (v > 0) this.stats.totalRevenue += v; G.emit('cash', v); }
   adjustFans(v) { if (!isFinite(v)) { console.error('adjustFans: valor no numérico', v); return; } this.fans = Math.max(0, Math.round(this.fans + v)); if (!isFinite(this.fans)) this.fans = 0; }
   hasResearch(id) { return this.researchCompleted.includes(id); }
@@ -603,25 +617,36 @@ const ACHIEVEMENTS = [
   { id: 'deptos', icon: '🏗️', name: 'La óptica completa', desc: 'Monta tienda, gabinete, taller y laboratorio', test: co => ['gabinete', 'taller', 'lab'].every(id => co.modules && co.modules[id] && co.modules[id].tier >= 1) && co.level >= 2 },
   { id: 'equipo', icon: '👥', name: 'Plantilla completa', desc: 'Llena la plantilla de la óptica insignia', test: co => co.level >= 4 && co.staff.length >= co.maxStaff },
   { id: 'sabio', icon: '🔬', name: 'Siempre investigando', desc: 'Completa 40 investigaciones', test: co => (co.researchCompleted || []).length >= 40 },
-  { id: 'decada', icon: '📅', name: 'Diez años abiertos', desc: 'Sigue en el negocio en 2005', test: co => co.getCurrentDate().year >= 11 },
-  { id: 'treinta', icon: '🎂', name: 'Treinta años de óptica', desc: 'Llega a 2025', test: co => co.getCurrentDate().year >= 31 }
+  { id: 'decada', icon: '📅', name: 'Diez años abiertos', desc: 'Sigue en el negocio diez años', test: co => co.getCurrentDate().year >= 11 },
+  { id: 'treinta', icon: '🎂', name: 'Treinta años de óptica', desc: 'Sigue en el negocio treinta años', test: co => co.getCurrentDate().year >= 31 }
 ];
 
 const G = {
   SAVE_KEY: 'opticaTycoon.v4',
+  END_YEAR: 2076,
+  /* épocas de inicio: año → contexto para la bienvenida */
+  ERA_INTRO: {
+    1965: 'España vive el desarrollismo: el oftalmólogo receta y la óptica talla y monta; las gafas de pasta y las de metal dorado mandan.',
+    1975: 'Llega la Transición: crisis del petróleo, inflación alta y una juventud que quiere gafas grandes y de colores.',
+    1985: 'España entra en la CEE (1986) y llega el IVA: cadenas de ópticas, lentillas desechables y el boom de las marcas.',
+    2026: 'Las gafas inteligentes ya se venden por millones y la miopía crece sin freno: el óptico se convierte en especialista en salud visual.'
+  },
   company: null, gameTime: 0, speed: 1, paused: true, currentFeature: null, featureQueue: [], currentEngineDev: null, currentContract: null, contracts: null, hireSearch: null, candidates: null,
   listeners: {}, points: [], lastResearchCheck: 0, pendingSliders: null, unreadLog: [],
   on(ev, fn) { (this.listeners[ev] = this.listeners[ev] || []).push(fn); },
   emit(ev, data) { (this.listeners[ev] || []).forEach(fn => fn(data)); },
 
   /* ---------- inicio ---------- */
-  newGame(companyName, playerName) {
+  newGame(companyName, playerName, startYear) {
     /* la partida anterior no se pierde: queda como copia («Recuperar partida anterior») */
     if (this.company) this.save(); try { const p = localStorage.getItem(G.SAVE_KEY); if (p) localStorage.setItem(G.SAVE_KEY + '.bak', p); } catch (e) { /* sin almacenamiento */ }
     this.removeOwnPlatforms();
-    this.company = new Company(companyName, playerName); this.gameTime = 0; this.currentFeature = null; this.featureQueue = []; this.currentEngineDev = null; this.currentContract = null; this.contracts = null; this.hireSearch = null; this.candidates = null; this.points = []; this.unreadLog = [];
+    this.company = new Company(companyName, playerName, startYear); this.gameTime = 0; this.currentFeature = null; this.featureQueue = []; this.currentEngineDev = null; this.currentContract = null; this.contracts = null; this.hireSearch = null; this.candidates = null; this.points = []; this.unreadLog = [];
     this.paused = true; this.speed = 1; Modules.init(this.company);
-    this.notify('Bienvenido', DATA.NEWS[0].text); this.company.scheduledShown.push('1/1/1');
+    /* las partidas que empiezan en 2026 arrancan con un mercado del tamaño del de 1995 (si no, serían un paseo); el crecimiento posterior se mantiene */
+    { const co = this.company; const tot = sh => { const save = co.startYear; co.startYear = sh; const t = Platforms.onMarket(0).reduce((s, p) => s + Platforms.rawMarketSize(p, 0), 0); co.startYear = save; return t; };
+      const t95 = tot(1995), t0 = tot(co.startYear); co.marketScale = t0 > t95 ? t95 / t0 : 1; }
+    const sy = this.company.startYear; this.notify('Bienvenido', DATA.NEWS[0].text.replace('Es 1995.', `Es ${sy}.`).replace('Envolvente → Deportiva', sy < 1984 ? 'Glaciar → Deportiva' : 'Envolvente → Deportiva') + (G.ERA_INTRO[sy] ? ' ' + G.ERA_INTRO[sy] : '')); this.company.scheduledShown.push('1/1/1');
     this.emit('newgame'); this.emit('refresh');
   },
 
@@ -657,12 +682,14 @@ const G = {
     Trends.update(co);
     if (co.level > 1 && d.month === 5 && d.week === 1 && d.year > 7) this.notify('IberÓptica', 'La feria IberÓptica (Madrid) se celebra en junio: ópticas, laboratorios y fabricantes de toda la península. ¿Reservamos un stand?', 'decision', { sourceId: 'booth' });
     else if (d.month === 6 && d.week === 2 && co.conferenceStandFactor) this.runConference();
-    for (const p of DATA.PLATFORMS) { if (Platforms.publishWeek(p) === w && w > 0) { this.notify('Noticias del canal', `Hoy se abre un nuevo canal de venta: ${p.name} (${p.company}).` + (p.licencePrize ? ` Licencia: ${U.money(p.licencePrize)}.` : ''), 'news'); if (p.licencePrize === 0 && !co.licencedPlatforms.includes(p.id)) co.licencedPlatforms.push(p.id); } if (Platforms.retireWeek(p) === w) this.notify('Noticias del canal', `${p.name} cierra sus puertas. Ya no se pueden lanzar colecciones ahí.`, 'news'); }
-    for (const n of DATA.NEWS) { if (U.weekFromDate(n.date) === w && !co.scheduledShown.includes(n.date)) { co.scheduledShown.push(n.date); if (n.flag) co.flags[n.flag] = true; this.notify(n.title, n.text, 'news'); } }
+    for (const p of DATA.PLATFORMS) { if (Platforms.publishWeek(p) === U.absWeek(w) && w > 0) { this.notify('Noticias del canal', `Hoy se abre un nuevo canal de venta: ${p.name} (${p.company}).` + (p.licencePrize ? ` Licencia: ${U.money(p.licencePrize)}.` : ''), 'news'); if (p.licencePrize === 0 && !co.licencedPlatforms.includes(p.id)) co.licencedPlatforms.push(p.id); } if (Platforms.retireWeek(p) === w) this.notify('Noticias del canal', `${p.name} cierra sus puertas. Ya no se pueden lanzar colecciones ahí.`, 'news'); }
+    for (const n of DATA.NEWS) { if (U.weekFromDate(n.date) === U.absWeek(w) && !co.scheduledShown.includes(n.date)) { co.scheduledShown.push(n.date); if (n.flag) co.flags[n.flag] = true; this.notify(n.title, n.text, 'news'); } }
     if (this.hireSearch && w >= this.hireSearch.targetWeek && !this.candidates) { this.candidates = this.generateApplicants(this.hireSearch); this.notify('Candidatos', `Han llegado ${this.candidates.length} candidaturas para el puesto. Revísalas en el menú de personal.`, 'decision', { sourceId: 'hire' }); }
     if (this.currentContract && this.currentContract.type === 'generic' && w >= this.currentContract.deadlineWeek) this.finishContract(false);
     if (d.month === 1 && d.week === 1 && d.year > 1) this.yearlyAwards(d.year - 1);
-    if (d.year === 31 && d.month === 1 && d.week === 1 && !co.flags.endShown) { co.flags.endShown = true; this.notify('30 años de óptica', 'Han pasado treinta años desde aquel puesto del mercado de 1995. Es hora de hacer balance.', 'decision', { sourceId: 'gameend', options: ['Ver la puntuación final'] }); }
+    if (d.month === 1 && d.week === 1 && (d.year === 36 || d.year === 71) && !co.flags['relevo' + d.year]) { co.flags['relevo' + d.year] = true; const best = this.bestHeirEmployee(); this.notify('Relevo generacional', `Han pasado ${d.year - 1} años desde que ${co.staff[0] ? co.staff[0].name : 'el fundador'} abrió el puesto. Toca decidir quién lleva la óptica a partir de ahora.`, 'decision', { sourceId: 'relevo', options: ['Lo coge mi hija o mi hijo', best ? `Se la dejo a ${best.name}` : 'Busco un gerente de fuera', 'Vender la óptica y retirarme'] }); }
+    if (d.month === 1 && d.week === 1 && co.realYear() >= this.END_YEAR && !co.flags.end2076) { co.flags.end2076 = true; co.flags.endReason = 'fin'; this.notify(`Fin de la partida: ${this.END_YEAR}`, `Hemos llegado a ${this.END_YEAR}. Hora de hacer balance de toda la historia de ${co.name}.`, 'decision', { sourceId: 'gameend', options: ['Ver la puntuación final'] }); }
+    if (d.year === 31 && d.month === 1 && d.week === 1 && !co.flags.endShown) { co.flags.endShown = true; this.notify('30 años de óptica', `Han pasado treinta años desde aquel puesto del mercado de ${co.startYear}. Es hora de hacer balance (la partida puede seguir hasta 2076).`, 'decision', { sourceId: 'gameend', options: ['Ver la puntuación final'] }); }
     this.randomEvents(w);
     this.checkAchievements();
     this.emit('week');
@@ -765,6 +792,18 @@ const G = {
       if (!this.modalOpen && !co.notifications.length) this.paused = this.userPaused || false; return; }
     this.modalOpen = true; this.paused = true; this.emit('notification', n);
   },
+  /* relevo generacional: el mejor empleado como posible sucesor */
+  bestHeirEmployee() { const co = this.company; return co.staff.filter(s => s.id !== 0).sort((a, b) => (b.designFactor + b.technologyFactor + (b.experience || 0) / 5000) - (a.designFactor + a.technologyFactor + (a.experience || 0) / 5000))[0] || null; },
+  resolveSuccession(choice) {
+    const co = this.company; const boss = co.staff[0]; if (!boss) return;
+    if (choice === 2) { co.flags.endReason = 'venta'; co.flags.sold = true; this.emit('gameend'); return; }
+    const surname = boss.name.split(' ').slice(1).join(' ') || boss.name;
+    if (choice === 1) { const h = this.bestHeirEmployee();
+      if (h) { boss.name = h.name; boss.designFactor = h.designFactor; boss.technologyFactor = h.technologyFactor; boss.speedFactor = h.speedFactor; boss.experience = h.experience; boss.sex = h.sex; boss.look = h.look; co.staff = co.staff.filter(s => s !== h); this.notify('Nueva dirección', `${h.name} pasa a dirigir ${co.name}. Conoce la casa como nadie: el equipo sigue igual de motivado.`); }
+      else { boss.name = U.pick(DATA.NAMES.female) + ' ' + U.pick(DATA.NAMES.last); boss.experience = Math.round((boss.experience || 0) * 0.5); this.notify('Nueva dirección', `${boss.name}, gerente de fuera, toma las riendas de ${co.name}.`); }
+    } else { const sex = U.rnd() < 0.5 ? 'female' : 'male'; boss.name = U.pick(DATA.NAMES[sex]) + ' ' + surname; boss.sex = sex; boss.experience = Math.round((boss.experience || 0) * 0.6); boss.designFactor = U.clamp(boss.designFactor * (0.85 + 0.3 * U.rnd()), 0.3, 1.5); boss.technologyFactor = U.clamp(boss.technologyFactor * (0.85 + 0.3 * U.rnd()), 0.3, 1.5); co.adjustFans(Math.round(co.fans * 0.03)); this.notify('Nueva generación', `${boss.name} coge el relevo en ${co.name}. Los clientes de toda la vida celebran que la óptica siga en la familia (+3 % de clientes fieles).`); }
+    this.emit('refresh');
+  },
   closeNotification(n, choice) {
     this.modalOpen = false; this.shownNotification = null;
     if (n && n.sourceId) {
@@ -773,6 +812,7 @@ const G = {
       if (n.sourceId === 'sliders') { this.emit('sliders', n.stage); return; }
       if (n.sourceId === 'reviews') { this.emit('reviews', n.game); return; }
       if (n.sourceId === 'gameend') { this.emit('gameend'); return; }
+      if (n.sourceId === 'relevo') { this.resolveSuccession(choice); if (choice === 2) return; }
       if (n.sourceId === 'awards') { this.emit('awards', n.ceremony); return; }
       if (n.sourceId === 'report') { if (choice === 0) { const g = this.company.gameLog.find(x => x.id === n.gameId); const rep = g ? this.generateReport(g) : null; if (rep) { this.emit('report', rep); return; } } }
       if (n.sourceId === 'counterfeit') this.resolveCounterfeit(n.gameId, choice);
@@ -797,7 +837,7 @@ const G = {
     if (r.date && !co.isLaterOrEqualThan(...r.date.split('/').map(Number))) return false; return true;
   },
   startResearch(itemId, staff, topicId) {
-    const co = this.company; const it = DB.item(itemId); if (!it) return false; if (!it.isTopic && (co.researchCompleted.includes(it.id) || co.staff.some(s => s.currentResearch && s.currentResearch.id === itemId))) return false; if (it.isTopic && co.staff.some(s => s.currentResearch && s.currentResearch.topicId === topicId)) return false; const pc = Research.pointsCost(it), cost = Research.researchCost(it);
+    const co = this.company; const it = DB.item(itemId); if (!it) return false; if (!it.isTopic && (co.researchCompleted.includes(it.id) || co.staff.some(s => s.currentResearch && s.currentResearch.id === itemId))) return false; if (it.isTopic && co.staff.some(s => s.currentResearch && s.currentResearch.topicId === topicId)) return false; if (it.isTopic && topicId && DB.topic(topicId) && (DB.topic(topicId).year || 0) > co.realYear()) return false; /* estilo que aún no existe en esta época */ const pc = Research.pointsCost(it), cost = Research.researchCost(it);
     if (co.researchPoints < pc || co.cash < cost || !staff.isIdle()) return false;
     co.researchPoints -= pc; if (cost) co.adjustCash(-cost, it.name);
     staff.state = 'researching'; staff.currentResearch = { id: it.id, topicId, progress: 0, duration: Research.duration(it) }; this.tutorial(it.big ? 'bigProject' : 'firstResearch', { name: staff.name }); this.emit('refresh'); return true;
@@ -1204,7 +1244,7 @@ const G = {
   removeOwnPlatforms() { for (let i = DATA.PLATFORMS.length - 1; i >= 0; i--) if (DATA.PLATFORMS[i].isCustom) DATA.PLATFORMS.splice(i, 1); },
   /* añade en caliente un canal propio a DATA.PLATFORMS (isOwn + isCustom: cuota = baseAmount + fansScale·fans/1M, tope maxAmount) y lo recuerda en co.ownPlatforms para recargarlo */
   addOwnPlatform(def, silent) {
-    const co = this.company; if (!co || !def || !def.id) return null; const d = co.getCurrentDate();
+    const co = this.company; if (!co || !def || !def.id) return null; const d = U.dateFromWeek(U.absWeek(co.currentWeek));
     const p = Object.assign({ company: co.name, isOwn: true, isCustom: true, licencePrize: 0, devCost: 30000, retire: '260/12/4', baseAmount: 0.8, fansScale: 2, maxAmount: 5, gw: [1, 1, 1, 1, 1, 1], aw: [1, 1, 1] }, def);
     if (!p.published) p.published = `${d.year}/${d.month}/${d.week}`; p.startAmount = p.baseAmount; p.unitsSold = p.maxAmount;
     if (!p.techLevel) { const others = Platforms.onMarket(Math.floor(co.currentWeek)).filter(x => !x.isCustom).map(x => x.techLevel || 1); p.techLevel = others.length ? Math.max(...others) : 1; }

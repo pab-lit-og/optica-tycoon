@@ -33,8 +33,8 @@
   const K = { START_WEEK: 6, MIN_GAP: 4, MAX_YEAR: 6, MAX_RANDOM_YEAR: 4, LOG_MAX: 200, P_ANEC: 0.012, SCALE: [0, 1.5, 4, 5, 10], ANEC_REPEAT: { gap: 8, max: 2 }, SEASON_REPEAT: { gap: 3, max: 4 } };
 
   /* ---------- utilidades ---------- */
-  const realYearOf = w => U.dateFromWeek(w).year + YEAR_ZERO;
-  const weekOfReal = (y, m) => U.weekFromDate(`${y - YEAR_ZERO}/${m || 1}/1`);
+  const realYearOf = w => U.realYear(U.dateFromWeek(w).year);
+  const weekOfReal = (y, m) => U.gameWeek(`${y - YEAR_ZERO}/${m || 1}/1`);
   const week = co => Math.floor(co.currentWeek);
   const scale = co => K.SCALE[co.level] || 1;
   const sc = (co, base) => Math.max(10, Math.round(base * scale(co) / 10) * 10);
@@ -43,7 +43,7 @@
   const genreIs = (g, id) => !!g && (g.genre === id || g.secondGenre === id);
   const hasGab = co => co.hasResearch('Gabinete') || !!(co.modules && co.modules.gabinete && co.modules.gabinete.tier > 0);
   const hasOptico = co => co.staff.some(x => x.role === 'optico');
-  const ctxOf = (co, w) => { const d = U.dateFromWeek(w); return { w, d, y: d.year + YEAR_ZERO, L: co.level }; };
+  const ctxOf = (co, w) => { const d = U.dateFromWeek(w); return { w, d, y: U.realYear(d.year), L: co.level }; };
   const toast = m => { try { if (typeof UI !== 'undefined' && UI && UI.toast) UI.toast(m); } catch (e) { /* sin DOM */ } };
 
   /* el registro de módulos pinta un botón por módulo en el menú lateral: este no es un departamento, se oculta */

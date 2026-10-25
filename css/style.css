@@ -357,3 +357,6 @@ body { touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
 .goal.done b { color: var(--muted); text-decoration: line-through; }
 .goal .bar.thin { margin-top: 4px; }
 @media (max-width: 760px) { .goals { grid-template-columns: 1fr; } }
+/* elección de época en la pantalla de inicio */
+.grid.eras { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 6px; }
+.grid.eras .sel { align-items: flex-start; text-align: left; }

@@ -477,7 +477,7 @@
       notify('Club deportivo', 'El club de baloncesto de la ciudad quiere un programa de entrenamiento visual para su cantera: 12.000 € por ocho semanas de sesiones, aunque nos ocuparán parte del gabinete.', 'decision', { sourceId: 'gabinete:club', options: ['Aceptar (12.000 €)', 'No tenemos hueco'] });
     }
     /* 7. Plan Mirada Escolar: solo si no existe el módulo de marketing */
-    if (!Modules.get('marketing') && w === U.weekFromDate('25/10/1') && co.hasResearch('AutorizacionSanitaria')) notify('Plan Mirada Escolar', 'La Consellería de Sanidade lanza el Plan Mirada Escolar: gafas y lentillas para menores de 16 años pagadas con fondos públicos en las ópticas adheridas. Adherirse cuesta 2.000 € de alta y cartelería y traería más revisiones infantiles durante un año.', 'decision', { sourceId: 'gabinete:planveo', options: ['Adherirse (2.000 €)', 'No, gracias'] });
+    if (!Modules.get('marketing') && w === U.gameWeek('25/10/1') && co.hasResearch('AutorizacionSanitaria')) notify('Plan Mirada Escolar', 'La Consellería de Sanidade lanza el Plan Mirada Escolar: gafas y lentillas para menores de 16 años pagadas con fondos públicos en las ópticas adheridas. Adherirse cuesta 2.000 € de alta y cartelería y traería más revisiones infantiles durante un año.', 'decision', { sourceId: 'gabinete:planveo', options: ['Adherirse (2.000 €)', 'No, gracias'] });
     /* 8. El showroomer (EVT_GAB_04): con examen gratuito, alguien pide la graduación para comprar las gafas por internet */
     if (s.examMode === 'gratis' && c.baseOk && !c.closed && s.lastShowroomer < w - 24 && hit(1.5)) {
       s.lastShowroomer = w;
