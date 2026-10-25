@@ -14,7 +14,7 @@
     last = now;
     try { G.tick(dt); } catch (e) { console.error(e); }
     try { Scene.draw(dt); } catch (e) { console.error(e); } /* un fallo de dibujo no debe parar el juego */
-    UI.tickCash();
+    try { UI.tickCash(); } catch (e) { console.error(e); }
     requestAnimationFrame(frame);
   }
   requestAnimationFrame(frame);

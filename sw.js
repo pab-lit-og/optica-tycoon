@@ -3,7 +3,7 @@
    Las fotos de las monturas van en una caché aparte que se conserva entre versiones (no se vuelven a bajar 5 MB en cada
    publicación) y se descargan una a una: si falla alguna, el resto del modo sin conexión sigue funcionando. */
 'use strict';
-const VERSION = 'fd6f16b099'; /* lo cambia publicar.sh en cada publicación */
+const VERSION = '172c2823b3'; /* lo cambia publicar.sh en cada publicación */
 const PHOTOS_VERSION = '0f7f17e76b'; /* huella de img/gafas (publicar.sh) */
 const CACHE = 'optica-tycoon-' + VERSION;
 const PHOTOS = 'optica-fotos-' + PHOTOS_VERSION;
@@ -17,20 +17,22 @@ self.addEventListener('install', e => {
     const assets = [...html.matchAll(/(?:src|href)="([^"#:]+)"/g)].map(m => './' + m[1].replace(/^\.\//, ''));
     await c.addAll([...new Set(BASE.concat(assets))]);
     const p = await caches.open(PHOTOS);
-    await Promise.allSettled(EXTRA.map(async u => { if (!(await p.match(u))) { const r = await fetch(u); if (r.ok) await p.put(u, r); } }));
+    /* reaprovecha las fotos de la versión anterior y baja el resto una a una (si falla una, las demás siguen) */
+    const olds = (await caches.keys()).filter(k => k.startsWith('optica-fotos-') && k !== PHOTOS);
+    for (const u of EXTRA) { try { if (await p.match(u)) continue; let hit = null; for (const k of olds) { hit = await (await caches.open(k)).match(u); if (hit) break; } if (hit) { await p.put(u, hit); continue; } const r = await fetch(u); if (r.ok) await p.put(u, r); } catch (err) { /* sin esa foto: se dibuja la montura */ } }
     await self.skipWaiting();
   })());
 });
 
 self.addEventListener('activate', e => {
-  e.waitUntil((async () => { for (const k of await caches.keys()) if (k !== CACHE && k !== PHOTOS) await caches.delete(k); await self.clients.claim(); })());
+  e.waitUntil((async () => { for (const k of await caches.keys()) if (k.startsWith('optica-') && k !== CACHE && k !== PHOTOS) await caches.delete(k); /* solo nuestras cachés: el dominio de Pages es compartido */ await self.clients.claim(); })());
 });
 
 self.addEventListener('fetch', e => {
   const r = e.request; if (r.method !== 'GET' || new URL(r.url).origin !== self.location.origin) return;
   e.respondWith((async () => {
     const isPhoto = /\/img\/gafas\//.test(new URL(r.url).pathname); const c = await caches.open(isPhoto ? PHOTOS : CACHE);
-    if (r.mode === 'navigate') { try { const net = await Promise.race([fetch(r), new Promise((_, rej) => setTimeout(() => rej(new Error('lenta')), 3500))]); /* con mala cobertura, la copia guardada */ if (net.ok) c.put('./index.html', net.clone()); return net; } catch (err) { return (await c.match('./index.html')) || (await c.match('./')) || Response.error(); } }
+    if (r.mode === 'navigate') { try { const net = await Promise.race([fetch(r), new Promise((_, rej) => setTimeout(() => rej(new Error('lenta')), 3500))]); /* con mala cobertura, la copia guardada */ if (net.ok && /\/(index\.html)?$/.test(new URL(r.url).pathname)) c.put('./index.html', net.clone()); return net; } catch (err) { return (await c.match('./index.html')) || (await c.match('./')) || Response.error(); } }
     const hit = await c.match(r); if (hit) return hit;
     try { const net = await fetch(r); if (net.ok) c.put(r, net.clone()); return net; } catch (err) { return Response.error(); }
   })());

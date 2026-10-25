@@ -33,7 +33,6 @@ const Scene = {
   co() { return G.company; },
   level() { return this.co() ? this.co().level : 1; },
   layout() { if (this.view !== 'main' && ROOMS[this.view]) return this.roomLayout(this.view); return LAYOUTS[this.level()] || LAYOUTS[1]; },
-  roomSize() { return this.layout().size; },
 
   /* ================= proyección ================= */
   scale() { const L = this.layout(); const R = L.size; const wall = 2.3; const s = Math.min(this.W * 0.99 / (R + 0.4), this.H * 0.97 / (R * 0.5 + wall * 0.5 + 0.3), 130); return Math.max(26, s); },
@@ -335,11 +334,10 @@ const Scene = {
     madera: ['rect', '#a0522d'], flexible: ['round', '#2980b9'], carbono: ['rect', '#2d3436'], joya: ['cat', '#d4ac0d'], acero: ['rimless', '#7f8c8d'], neon: ['shield', '#e84393'], soft: ['rect', '#6d6d6d'], nordico: ['round', '#bdc3c7'], retro70: ['aviator', '#8e5a2b', 1.15], retro80: ['rect', '#e84393', 1.15],
     noventas: ['round', '#1d1d1d', 0.8], y2k: ['shield', '#8e44ad'], logomania: ['rect', '#d4ac0d'], hipster: ['panto', '#1d1d1d', 1.05], eco: ['round', '#7d5a3c'], techwear: ['shield', '#2d3436'], smart: ['rect', '#2c3e50', 1.05], lujosilencioso: ['rect', '#b7950b', 0.95], arquitecto: ['hex', '#2d3436'], steampunk: ['round', '#b87333'],
     carreras: ['aviator', '#c0392b'], surf: ['shield', '#16a085'], oversize: ['rect', '#1d1d1d', 1.25], flexkids: ['round', '#16a085'] },
-  /* fotos de producto (img/gafas/<estilo>-g.webp lente graduada, -s.webp lente solar). Un estilo nuevo sin foto puede usar la
-     de otro (PHOTO_ALIAS) y, si no hay ninguna o no carga (sin conexión y sin caché), se dibuja la montura vectorial. */
+  /* fotos de producto (img/gafas/<estilo>-g.webp lente graduada, -s.webp lente solar). Si un estilo no tiene foto o no
+     carga (sin conexión y sin caché), se dibuja la montura vectorial (PREVIEW). */
   PHOTOS: 'abuelita,acero,alaire,arquitecto,audiogafa,autofoco,autorreparable,aviadegr,aviador,bicolor,bifocal,carbono,carey,carreras,cateye,cazal,chunky,climatica,clubmaster,combinada,crownpanto,culovaso,doblepuente,eco,electrocromica,envolventes,escudo,esqui,flexible,flexkids,gafaar,glaciar,glam,grafeno,hexagonales,hipster,impresa3d,joya,keyhole,lentillaint,logomania,lujosilencioso,madera,mariposa,medialuna,micelio,microoval,minimal,mioexterior,modular2,movida,navegador,neoanalogica,neon,neural,nordico,noventas,nylor,optyl,oversize,pantallahud,pantos,parche,plegable,protesica,rectangulares,redondas,retro70,retro80,retroveinte,sinvarillas,smart,soft,solar,steampunk,surf,techwear,titanio,transicion,transparentes,varillabaja,vintagecert,visera,wayfarer,y2k,yuppie',
-  PHOTO_ALIAS: {},
-  photoSrc(topic, genre) { if (!this._phs) this._phs = new Set(this.PHOTOS.split(',')); const id = this._phs.has(topic) ? topic : this.PHOTO_ALIAS[topic]; if (!id || !this._phs.has(id)) return null; return 'img/gafas/' + id + (genre === 'sol' || genre === 'deportiva' ? '-s' : '-g') + '.webp'; },
+  photoSrc(topic, genre) { if (!this._phs) this._phs = new Set(this.PHOTOS.split(',')); const id = this._phs.has(topic) ? topic : null; if (!id) return null; return 'img/gafas/' + id + (genre === 'sol' || genre === 'deportiva' ? '-s' : '-g') + '.webp'; },
   photo(src, cb) { this._ph = this._ph || new Map(); let e = this._ph.get(src);
     if (!e) { e = { im: new Image(), cbs: [] }; e.im.decoding = 'async'; e.im.onload = () => { const l = e.cbs; e.cbs = []; l.forEach(f => f()); }; e.im.onerror = () => { e.bad = true; e.cbs = []; }; e.im.src = src; this._ph.set(src, e); if (this._ph.size > 60) { const k = this._ph.keys().next().value; if (k !== src) this._ph.delete(k); } }
     if (e.bad) return null; if (e.im.complete && e.im.naturalWidth) return e.im; if (cb) e.cbs.push(cb); return null; },

@@ -68,7 +68,7 @@ DATA.STAGES = [
   { name: 'Fase 1 · Diseño', missions: [
     { id: 'Estructura', name: 'Estructura y bisagras', desc: 'Varillas, bisagras, tornillería y resistencia.', tF: 0.8, dF: 0.2, gw: [0.8, 0.9, 1, 1, 0.8, 0.9, 0.9] },
     { id: 'Forma',      name: 'Forma y frente',        desc: 'Silueta del frente, proporciones y encaje facial.', tF: 0.2, dF: 0.8, gw: [1, 0.9, 0.9, 0.8, 0.9, 1, 0.8] },
-    { id: 'Concepto',   name: 'Concepto y tendencia',  desc: 'Inspiración, moodboard y narrativa de la colección.', tF: 0.2, dF: 0.8, gw: [1, 0.8, 0.8, 0.8, 0.8, 1, 0.9] }
+    { id: 'Concepto',   name: 'Concepto y tendencia',  desc: 'Inspiración, paneles de tendencias y narrativa de la colección.', tF: 0.2, dF: 0.8, gw: [1, 0.8, 0.8, 0.8, 0.8, 1, 0.9] }
   ]},
   { name: 'Fase 2 · Fabricación', missions: [
     { id: 'Acabados',   name: 'Acabados y color',      desc: 'Pulidos, lacados, colores y texturas.', tF: 0.1, dF: 0.9, gw: [1, 0.9, 0.8, 0.9, 0.9, 1, 0.7] },
@@ -496,7 +496,7 @@ DATA.NAMES = {
 
 /* ---------- noticias programadas (año/mes) ---------- */
 DATA.NEWS = [
-  { date: '1/1/1', title: 'Bienvenido', text: 'Es 1995. Has montado un puesto de gafas en el mercado con 70.000 € ahorrados. Haz clic en el mostrador (o en «Nueva colección») para diseñar tu primera colección. Lo que más pesa en la nota es que el tipo pegue con el estilo (Aviador → Sol, Envolvente → Deportiva, Media luna → Lectura). En el mercadillo funcionan el sol y la lectura: las gafas graduadas necesitan una óptica con gabinete.' },
+  { date: '1/1/1', title: 'Bienvenido', text: 'Es 1995. Has montado un puesto de gafas en el mercado con 70.000 € ahorrados. Toca el mostrador (o «Nueva colección») para diseñar tu primera colección. Lo que más pesa en la nota es que el tipo pegue con el estilo (Aviador → Sol, Envolvente → Deportiva, Media luna → Lectura). En el mercadillo funcionan el sol y la lectura: las graduadas se venden a mitad de precio hasta tener local comercial y la autorización sanitaria.' },
   { classic: true, date: '1/8/1', title: 'Rumor', text: 'Dicen que las grandes ópticas van a dejar de fabricar sus propias monturas y buscarán proveedores pequeños.' },
   { classic: true, date: '2/1/1', title: 'Noticias del sector', text: 'Las ópticas de barrio empiezan a comprar colecciones a diseñadores independientes. Su red abrirá pedidos la semana que viene.' },
   { classic: true, date: '2/6/1', title: 'Público objetivo', text: 'Los estudios de mercado empiezan a segmentar las ventas de gafas por edades. Investigar "Público objetivo" permitiría orientar mejor cada colección.', flag: 'targetAudienceStory' },

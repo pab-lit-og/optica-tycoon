@@ -55,11 +55,11 @@ const Advisor = {
     else if (fixed > 0 && co.cash < fixed * 2 && co.gameLog.length > 0) add(80, '💸', 'Caja justa', `Tienes menos de dos meses de gastos fijos (${U.money(fixed)}/mes). Prioriza vender antes que invertir.`, null);
     // 2. personal agotado
     const tired = co.staff.filter(s => s.flags && s.flags.needsVacation && s.state !== 'vacation');
-    if (tired.length) add(90, '😴', `${tired.length === 1 ? tired[0].name.split(' ')[0] + ' necesita' : tired.length + ' personas necesitan'} vacaciones`, 'Cansados rinden mucho menos y meten más defectos. Mándalos de vacaciones entre colecciones.', 'staff');
+    if (tired.length) add(90, '😴', `${tired.length === 1 ? tired[0].name.split(' ')[0] + ' necesita' : tired.length + ' personas necesitan'} vacaciones`, 'Con cansancio se rinde mucho menos y salen más defectos. Dales vacaciones entre colecciones.', 'staff');
     // 3. sin proyecto
     if (idle && !co.currentGame && !G.currentEngineDev && co.staff.some(s => s.isAvailable && s.isAvailable())) {
       const team = co.staff.filter(s => !s.assignment).length; const sizes = co.availableSizes(); let best = sizes.filter(sz => C.SIZE[sz].optimalTeam <= Math.max(1, team)).pop() || 'small'; if (co.level >= 2 && best === 'small' && sizes.includes('medium')) best = 'medium';
-      add(85, '👓', 'Empieza una colección', `No hay nada en marcha. Con ${team} persona${team === 1 ? '' : 's'} en diseño, el tamaño que mejor rinde es ${C.SIZE[best].label.toLowerCase()}.`, 'newgame');
+      add(85, '👓', 'Empieza una colección', `No hay nada en marcha. Con ${team} persona${team === 1 ? '' : 's'} en diseño, lo que mejor rinde es una colección ${C.SIZE[best].label.toLowerCase()}.`, 'newgame');
     }
     // 3b. tamaño: desde el local comercial las pequeñas restan nota; si falta gente en diseño, traerla de un departamento
     if (co.level >= 2 && co.hasResearch('MediumSizeGames')) { const team = co.staff.filter(s => !s.assignment).length; const inDept = co.staff.length - team; const opt = C.SIZE.medium.optimalTeam;
@@ -70,7 +70,7 @@ const Advisor = {
         const tip = worst ? ({ time: 'da más tiempo a los campos clave del tipo en cada fase (los informes los marcan con ☆)', balance: 'equilibra diseño y técnica (mira si faltó diseño o técnica)', channel: 'elige un canal que encaje mejor con el tipo (estrellas en el asistente)', audience: 'cambia el público o el estilo', chanaud: 'ese canal apenas llega a ese público', bugs: 'deja que el control de calidad llegue a 0 defectos', other: 'no repitas la misma combinación seguida', combo: 'ese estilo no pega con ese tipo', trend: 'la moda iba en contra: prueba otro estilo', mix: 'no mezcles canales muy distintos', tech: lg.flags.techWhy === 'small' ? 'pasa a colecciones medianas' : lg.flags.techWhy === 'medium' ? 'consigue más clientes fieles (20.000) o crea una línea de producción nueva' : 'crea una línea de producción con tus tecnologías más nuevas' }[worst.k] || '') : (bd.base < 6 ? 'genera más puntos: más gente en diseño, tamaño acorde y personal descansado' : '');
         if (tip) add(64, '📉', `${lg.title}: ${lg.score.toFixed(1)}${worst ? ' · lo que más restó: ' + worst.label.toLowerCase() : ''}`, 'Para la próxima: ' + tip + '.', null); } }
     // 3d. desgaste por canal: el canal favorito empieza a cansarse
-    { const worn = (co.licencedPlatforms || []).map(id => ({ id, f: G.wearFactor ? G.wearFactor(co, id) : 1 })).filter(x => x.f < 0.82).sort((a, b) => a.f - b.f)[0];
+    { const worn = (co.licencedPlatforms || []).map(id => ({ id, f: G.wearFactor ? G.wearFactor(co, id) : 1 })).filter(x => x.f < 0.92).sort((a, b) => a.f - b.f)[0];
       if (worn && DB.platform(worn.id)) add(52, '🔄', `Canal «${DB.platform(worn.id).name}» desgastado (−${Math.round((1 - worn.f) * 100)} % de ventas)`, 'Has lanzado muchas colecciones seguidas en ese canal. Alterna con otro canal (o añade uno con Multicanal) mientras se recupera: un 15 % cada mes.', null); }
     // 4. mudanza
     const nl = G.nextLevelInfo && G.nextLevelInfo();
@@ -109,7 +109,7 @@ const Advisor = {
     for (const a of this.deptAlerts(co).filter((a, i, arr) => arr.findIndex(b => b.dept === a.dept) === i)) { const nm = this.DEPT_NAMES[a.dept] || ''; if (!out.some(o => o.title === a.title || (nm && o.title.toLowerCase().includes(nm.replace(/^(el|la) /, ''))))) add(a.p, a.icon, a.title, a.why, a.go); }
     // 9. objetivos cercanos
     if (nl && !nl.ok) add(25, '🎯', `Para pasar a ${nl.name}`, 'Te falta: ' + nl.reasons.join(', ') + '.', 'local');
-    if (g && G.currentFeature && G.currentFeature.id === 'BugFixing' && G.currentFeature.progress >= 1 && (g.bugs || 0) > 0) add(40, '🧪', 'Colección lista para lanzar', `Quedan ${Math.round(g.bugs)} defectos: el equipo sigue corrigiendo. Espera a 0 para mejor nota o pulsa «Lanzar ya».`, null);
+    if (g && G.currentFeature && G.currentFeature.id === 'BugFixing' && G.currentFeature.progress >= 1 && (g.bugs || 0) > 0) add(40, '🧪', 'Colección lista para lanzar', `Quedan ${Math.round(g.bugs)} defecto${Math.round(g.bugs) === 1 ? '' : 's'}: el equipo sigue corrigiendo. Espera a 0 para mejor nota o pulsa «Lanzar ya».`, null);
     return out.sort((a, b) => b.p - a.p);
   },
 

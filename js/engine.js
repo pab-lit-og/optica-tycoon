@@ -107,7 +107,7 @@ const Research = {
 Research.bigProjects = [
   { id: 'RnDLab', name: 'Laboratorio I+D', category: 'Laboratorio I+D', big: true, pointsCost: 300, duration: 20000, cost: 2000000, req: c => c.level >= 4, desc: 'Montamos un laboratorio de I+D en la óptica insignia: abre proyectos grandes que cambian el negocio (marca propia, canales propios, suscripción).' },
   { id: 'OwnLensBrand', name: 'Marca propia de lentes', category: 'Laboratorio I+D', big: true, pointsCost: 600, duration: 30000, cost: 5000000, req: c => c.hasResearch('RnDLab'), desc: 'Lentes con nuestra propia marca: +8 % de ventas en Graduado, Lectura e Infantil y +15 de expectación en cada colección nueva.', onComplete(co) { co.flags.ownLensBrand = true; } },
-  { id: 'GafaPropia', name: 'Plataforma de gafa propia', category: 'Laboratorio I+D', big: true, pointsCost: 1000, duration: 40000, cost: 15000000, req: c => c.hasResearch('RnDLab') && c.hasResearch('LineaInteligente') && c.isLaterOrEqualThan(37, 1), desc: 'Nuestra propia gafa inteligente con su tienda de aplicaciones (la consola propia de Game Dev Tycoon): un canal sin licencia cuya cuota crece con los clientes fieles.', onComplete(co) { G.addOwnPlatform({ id: 'gafapropia', name: 'Nuestra gafa inteligente', baseAmount: 0.8, fansScale: 2.2, maxAmount: 7, devCost: 40000, gw: [0.8, 1, 1, 0.7, 0.7, 1, 1], aw: [1, 1, 0.8] }); } },
+  { id: 'GafaPropia', name: 'Plataforma de gafa propia', category: 'Laboratorio I+D', big: true, pointsCost: 1000, duration: 40000, cost: 15000000, req: c => c.hasResearch('RnDLab') && c.hasResearch('LineaInteligente') && c.isLaterOrEqualThan(37, 1), desc: 'Nuestra propia gafa inteligente con su tienda de aplicaciones : un canal sin licencia cuya cuota crece con los clientes fieles.', onComplete(co) { G.addOwnPlatform({ id: 'gafapropia', name: 'Nuestra gafa inteligente', baseAmount: 0.8, fansScale: 2.2, maxAmount: 7, devCost: 40000, gw: [0.8, 1, 1, 0.7, 0.7, 1, 1], aw: [1, 1, 0.8] }); } },
   { id: 'OwnTryOn', name: 'Probador virtual propio', category: 'Laboratorio I+D', big: true, pointsCost: 800, duration: 35000, cost: 8000000, req: c => c.hasResearch('RnDLab') && c.isLaterOrEqualThan(14, 1), desc: 'Nuestra propia app de probador virtual: un canal de venta propio sin licencia cuya cuota de mercado crece con los clientes fieles.', onComplete(co) { G.addOwnPlatform({ id: 'probadorpropio', name: 'Probador virtual propio', baseAmount: 0.8, fansScale: 2.0, maxAmount: 5, devCost: 30000, gw: [1, 0.9, 0.9, 0.9, 0.8, 0.9], aw: [0.9, 1, 0.9] }); } },
   { id: 'OwnFrameBrand', name: 'Marca propia de monturas', category: 'Laboratorio I+D', big: true, pointsCost: 900, duration: 40000, cost: 10000000, req: c => c.hasResearch('OwnLensBrand'), desc: 'Boutiques con nuestra marca de monturas: canal propio premium y +30 de expectación en cada colección.', onComplete(co) { co.flags.ownFrameBrand = true; G.addOwnPlatform({ id: 'boutiquepropia', name: 'Boutiques de marca propia', baseAmount: 0.6, fansScale: 1.6, maxAmount: 4.5, devCost: 40000, gw: [1, 0.9, 0.7, 0.7, 0.7, 1], aw: [0.8, 0.9, 1] }); } },
   { id: 'Subscription', name: 'Suscripción de gafas', category: 'Laboratorio I+D', big: true, pointsCost: 1000, duration: 40000, cost: 12000000, req: c => c.hasResearch('OwnTryOn') && c.isLaterOrEqualThan(17, 1), desc: 'Gafas por suscripción: canal propio de recurrencia y un ingreso mensual proporcional a los clientes fieles.', onComplete(co) { co.flags.subscription = true; G.addOwnPlatform({ id: 'suscripcionpropia', name: 'Suscripción propia', baseAmount: 1.0, fansScale: 2.5, maxAmount: 6, devCost: 30000, gw: [0.9, 0.9, 0.8, 1, 0.9, 1], aw: [1, 1, 0.8] }); } }
@@ -366,12 +366,12 @@ const Reviews = {
     const missions = g.featureLog.filter(a => a.missionType === 'mission');
     const frac = a => a.duration / General.sizeDuration(g.size) / General.multiPlatformDuration(g) / (3 * C.BASE_DURATION);
     const good = missions.filter(a => W.missionGenre(DB.mission(a.id), g) >= 0.9 && frac(a) >= 0.4);
-    if (good.length >= 2) { s += 0.2; u += good.length; pos.push(`Su atención a "${DB.mission(U.pick(good).id).name}" le ha sentado muy bien a esta colección.`); }
+    if (good.length >= 2) { s += 0.2; u += good.length; pos.push(`Su atención a «${DB.mission(U.pick(good).id).name}» le ha sentado muy bien a esta colección.`); }
     else if (good.length === 1) { s += 0.1; u += 1; } else s -= 0.15 * l0;
     const odd = missions.filter(a => W.missionGenre(DB.mission(a.id), g) < 0.8 && frac(a) >= 0.4);
-    if (odd.length === 2) { s -= 0.2 * l0; t += 2; neg.push(`Tanto esfuerzo en "${DB.mission(U.pick(odd).id).name}" resulta un poco raro.`); } else if (odd.length === 1) { s -= 0.1 * l0; t += 1; }
+    if (odd.length === 2) { s -= 0.2 * l0; t += 2; neg.push(`Tanto esfuerzo en «${DB.mission(U.pick(odd).id).name}» resulta un poco raro.`); } else if (odd.length === 1) { s -= 0.1 * l0; t += 1; }
     const forgot = missions.filter(a => W.missionGenre(DB.mission(a.id), g) >= 0.9 && frac(a) <= 0.2);
-    for (const a of forgot) { s -= 0.15 * l0; t += 1; neg.push(`No deberían olvidarse de "${DB.mission(a.id).name}".`); }
+    for (const a of forgot) { s -= 0.15 * l0; t += 1; neg.push(`No deberían olvidarse de «${DB.mission(a.id).name}».`); }
     const sTime = s - sBal;
     /* datos para el informe post-lanzamiento (G.generateReport) */
     g.flags.reportData = { good: good.map(a => a.id), odd: odd.map(a => a.id), forgot: forgot.map(a => a.id), balance };
@@ -382,7 +382,7 @@ const Reviews = {
     if (last && last.genre === g.genre && last.secondGenre === g.secondGenre && last.topic === g.topic) { t += 1; neg.push(`¿Otra colección ${gName} de estilo ${tName}?`); g.flags.sameGenreTopic = true; s += -0.4; }
     const plats = g.platforms.map(DB.platform); const pw = W.platformGenre(plats, g.genre, g.secondGenre);
     if (pw <= 0.6) neg.push(`Las colecciones ${gName} no funcionan bien en ${plats[0].name}.`); else if (pw > 1) pos.push(`Las colecciones ${gName} funcionan muy bien en ${plats[0].name}.`);
-    const aw = W.audience(DB.topic(g.topic).aw, g.targetAudience); if (aw <= 0.6) neg.push(`${tName} es un estilo horrible para el público "${DATA.AUDIENCES.find(a => a.id === g.targetAudience).name}".`);
+    const aw = W.audience(DB.topic(g.topic).aw, g.targetAudience); if (aw <= 0.6) neg.push(`${tName} es un estilo horrible para el público «${DATA.AUDIENCES.find(a => a.id === g.targetAudience).name}».`);
     if (g.flags.sequelsTooClose) { s -= 0.4; t += 1; neg.push(`¿No acabamos de ver ${seq.title} hace nada?`); }
     if (g.sequelTo && seq) { if (g.engine === seq.engine) { s -= 0.1; t += 1; } else { const e1 = co.engines.find(e => e.id === g.engine), e2 = co.engines.find(e => e.id === seq.engine); if (e1 && e2 && e1.parts.length > e2.parts.length) { s += 0.2; u += 1; } } }
     const sOther = s - sBal - sTime;
@@ -399,16 +399,16 @@ const Reviews = {
     z = U.clamp(10 * z, 1, 10);
     /* fracción del equipo de colecciones (sin contar departamentos) que ha trabajado en esta colección */
     { const team = co.staff.filter(st => !st.assignment); const n = team.filter(st => g.flags.staffContribution && g.flags.staffContribution[st.id]).length; g.flags.teamContribution = team.length ? n / team.length : 1; }
-    const newStaff = co.staff.filter(st => (st.flags.gamesContributed || 0) < 1 && st.id !== 0);
+    const newStaff = co.staff.filter(st => !st.assignment && (st.flags.gamesContributed || 0) < 1 && st.id !== 0); /* solo el equipo de diseño: quien está en un departamento no es «nuevo en el equipo» */
     if (co.lastTopScore > 0 && z <= 5.2 - 0.2 * plats.length && u > 0 && u > t && g.flags.teamContribution >= 0.8) {
-      let q = 6; const opt = General.optimalTeam(g); const diff = Math.abs(opt - co.staff.length); if (diff > 1) q -= diff - 1; if (newStaff.length) q -= newStaff.length / 2;
+      let q = 6; const opt = General.optimalTeam(g); const diff = Math.abs(opt - co.staff.filter(st => !st.assignment).length); if (diff > 1) q -= diff - 1; if (newStaff.length) q -= newStaff.length / 2;
       q += u / 2 - t / 2; if (A < 0.9) q -= 0.5; else if (A <= 0.6) q -= 1; if (pw <= 0.8) q -= 1 - pw; if (aw <= 0.8) q -= 1 - aw; q -= U.rnd(); q = Math.min(q, 7.7);
       if (z < q) { g.flags.scoreWithoutBrackets = z; z = q; }
       if (co.gameLog.length > 3) { let bad = true; for (let i = 1; i <= 3; i++) { const gg = co.gameLog[co.gameLog.length - i]; if (gg.score > 5.2 - 0.2 * gg.platforms.length && !gg.flags.scoreWithoutBrackets) { bad = false; break; } } if (bad) { co.lastTopScore = score / trend; g.flags.topScoreDecreased = true; } }
     }
     const tf = Reviews.techFactor(co, g) / 10; if (g.size !== 'small' && g.size !== 'medium' && tf < 1) neg.push(g.size === 'aaa' && (g.flags.expertCount || 0) < 3 ? 'Una colección insignia necesita especialistas al frente de sus campos clave.' : 'La tecnología no está a la última.'); z *= tf;
     if (z >= 9) {
-      let reduce = false; if (s < 0.1 && U.rnd() < 0.8) reduce = true; else if (newStaff.length) { reduce = true; g.flags.newStaffIds = newStaff.map(x => x.id); }
+      let reduce = false; if (s < 0.1 && U.rnd() < 0.8) { reduce = true; g.flags.capWhy = 'fields'; } else if (newStaff.length) { reduce = true; g.flags.newStaffIds = newStaff.map(x => x.id); g.flags.capWhy = 'new'; }
       if (reduce) { z = g.flags.newStaffIds && g.flags.newStaffIds.length ? 8.15 + 0.95 / g.flags.newStaffIds.length * U.rnd() : 8.45 + 0.65 * U.rnd(); if (U.rnd() < 0.1) z = 9 + 0.25 * U.rnd(); Reviews.setTopScore(co, score / trend); }
     }
     if (seq) { if (z <= 4) neg.push('¡Qué segunda edición tan horrible!'); else if (z <= 7) neg.push('Una segunda edición del montón.'); else pos.push('¡Gran segunda edición!'); }
@@ -465,16 +465,18 @@ const Sales = {
     v = v * q / 15 * 0.2 + 0.008; const vv = [v, v, v];
     for (let i = 0; i < plats.length; i++) { vv[i] *= W.platformAudience([plats[i]], g.targetAudience); t[i] += Math.floor(m[i] * vv[i]); }
     if (g.hypePoints) { const c = Math.min(500, g.hypePoints) / 500; if (d >= 5) for (let i = 0; i < plats.length; i++) t[i] += Math.floor((d - 5) / 5 * m[i] * c * 0.05); else for (let i = 0; i < plats.length; i++) t[i] -= Math.floor(d / 5 * vv[i] * 0.25 * c * m[i]); }
-    for (let i = 0; i < plats.length; i++) t[i] = Math.floor(Math.min(t[i], m[i]) * G.wearFactor(co, plats[i].id)); /* desgaste por canal: repetir canal agota a su clientela */
+    for (let i = 0; i < plats.length; i++) t[i] = Math.floor(Math.min(t[i], m[i]));
     if (g.flags.royaltyRate) { t[0] += Math.max(0, Sales.targetFans(g) - k) * f; for (let i = 0; i < plats.length; i++) t[i] *= 10; } else t[0] += k * f;
     const sum = t.reduce((a, b) => a + b, 0); let units = Math.floor(0.8 * sum * f + 0.2 * sum * U.rnd());
     units = Math.floor(units * Modules.product('salesFactor', co, g));
     units = Math.floor(units * G.coreSalesFactor(co, g));
+    /* desgaste por canal: repetir canal agota a su clientela (media de los canales usados, como mucho −15 %) */
+    units = Math.floor(units * plats.reduce((a, p) => a + G.wearFactor(co, p.id), 0) / Math.max(1, plats.length));
     g.unitPrice = Sales.unitPrice(g); g.unitCost = Modules.sum('unitCost', co, g); g.marginFactor = Math.max(0.2, 1 - g.unitCost / g.unitPrice);
     let c = 0; if (d >= 7 && !g.flags.sequelsTooClose) c += 0.05 * k + 0.05 * k * U.rnd();
     if (d >= 5 && !g.flags.sequelsTooClose) { if (g.flags.royaltyRate && Sales.targetFans(g) - k <= 0) c += Math.floor((0.0075 * units * f + 0.0075 * units * U.rnd()) / 10); else c += Math.floor(0.0075 * units * f + 0.0075 * units * U.rnd()); } else c = -co.fans * (1 - f) * 0.25 * U.rnd();
     g.totalSalesCash = units * g.unitPrice * C.UNIT_SCALE * g.marginFactor; g.currentSalesCash = 0; g.salesCashLog = []; g.unitsSold = 0; g.revenue = 0; g.fansChangeTarget = c; g.fansChanged = 0;
-    co.chanWear = co.chanWear || {}; for (const p of plats) co.chanWear[p.id] = (co.chanWear[p.id] || 0) + 1; g.flags.wearAtLaunch = plats.map(p => Math.round((1 - G.wearFactor(co, p.id)) * 100));
+    co.chanWear = co.chanWear || {}; for (const p of plats) co.chanWear[p.id] = (co.chanWear[p.id] || 0) + 1;
     g.initialSalesRank = Sales.initialRank(g); g.topSalesRank = g.initialSalesRank; g.currentSalesRank = g.initialSalesRank; g.soldOut = false;
   },
   initialRank(g) { const c = Math.floor(g.score); let d; if (c === 10) d = 1; else if (c === 9) d = 5; else if (c === 8) d = 10; else if (c === 7) d = 20; else if (c === 6) d = 40; else if (c === 5) d = 60; else return -1; let x = d * U.rnd(); x += 0.5 * d * U.rnd() * U.sign(); const f = Math.floor(d + x); if (f > 100) return -1; return f <= 0 ? 1 : f; },
@@ -542,7 +544,7 @@ Estilos de moda: ${era.styles.map(id => DB.topic(id) ? DB.topic(id).name : id).j
       else b.currentTrend = { type: 'strangeCombos', label: 'Tendencia: combinaciones raras' };
     }
     if (prev && !b.currentTrend) G.notify('Tendencias', 'El mercado se ha normalizado y ya no hay tendencias claras.', 'news');
-    else if (b.currentTrend) { const txt = { genre: `Las revistas no hablan de otra cosa: las gafas de tipo "${b.currentTrend.genre ? DB.genre(b.currentTrend.genre).name : ''}" arrasan. Se espera que las colecciones de este tipo se vendan mejor durante los próximos meses.`, newTopics: 'Los clientes están cansados de lo de siempre. Las colecciones con estilos que nunca hayamos trabajado tendrán mejor acogida.', audience: `Los analistas detectan una demanda fuerte en el público "${b.currentTrend.audience ? DATA.AUDIENCES.find(a => a.id === b.currentTrend.audience).name : ''}".`, strangeCombos: 'Hay una moda extraña: cuanto más rara sea la combinación de estilo y tipo, mejor se vende. Las combinaciones "perfectas" se ven aburridas.' }[b.currentTrend.type]; G.notify('Tendencias del mercado', txt, 'news'); }
+    else if (b.currentTrend) { const txt = { genre: `Las revistas no hablan de otra cosa: las gafas de tipo «${b.currentTrend.genre ? DB.genre(b.currentTrend.genre).name : ''}» arrasan. Se espera que las colecciones de este tipo se vendan mejor durante los próximos meses.`, newTopics: 'Los clientes están cansados de lo de siempre. Las colecciones con estilos que nunca hayamos trabajado tendrán mejor acogida.', audience: `Los analistas detectan una demanda fuerte en el público «${b.currentTrend.audience ? DATA.AUDIENCES.find(a => a.id === b.currentTrend.audience).name : ''}».`, strangeCombos: 'Hay una moda extraña: cuanto más rara sea la combinación de estilo y tipo, mejor se vende. Las combinaciones "perfectas" se ven aburridas.' }[b.currentTrend.type]; G.notify('Tendencias del mercado', txt, 'news'); }
   }
 };
 
@@ -565,7 +567,11 @@ class Company {
   }
   /* repara partidas antiguas: rellena los campos nuevos con valores por defecto */
   repair() {
-    if (!this.startYear) this.startYear = 1995;
+    if (!this.startYear || !Number.isFinite(+this.startYear)) this.startYear = 1995;
+    for (const [k, v] of [['cash', 0], ['fans', 0], ['researchPoints', 0], ['currentWeek', 0]]) if (!Number.isFinite(this[k])) this[k] = v;
+    this.level = U.clamp(Math.round(+this.level) || 1, 1, C.LEVELS.length - 1);
+    for (const k of ['notifications', 'gameLog', 'engines', 'licencedPlatforms', 'topics', 'researchCompleted', 'availableResearch', 'scheduledShown', 'cashLog']) if (!Array.isArray(this[k])) this[k] = [];
+    this.topics = this.topics.filter(t => DB.topic(t)); this.gameLog = this.gameLog.filter(g => g && DB.topic(g.topic) && DB.genre(g.genre));
     this.flags = this.flags || {}; if (!this.flags.featureResponsibility || typeof this.flags.featureResponsibility !== 'object') this.flags.featureResponsibility = {};
     if (this.flags.nextGameHypeBonus === undefined) this.flags.nextGameHypeBonus = 0;
     if (!this.knowledge || typeof this.knowledge !== 'object') this.knowledge = {};
@@ -580,7 +586,7 @@ class Company {
   isLaterOrEqualThan(y, m) { return Math.floor(this.currentWeek) + (this.startYear - 1995) * 48 >= U.weekFromDate(`${y}/${m || 1}/1`); }
   realYear() { return this.getCurrentDate().year + this.startYear - 1; }
   playedAtLeast(y, m) { return Math.floor(this.currentWeek) >= U.weekFromDate(`${y}/${m || 1}/1`); } /* tiempo jugado (hitos de progresión, como en GDT) */
-  adjustCash(v, label) { if (!isFinite(v)) { console.error('adjustCash: valor no numérico', label, v); return; } this.cash += v; if (label) this.cashLog.push({ week: Math.floor(this.currentWeek), amount: v, label }); if (this.cashLog.length > 400) this.cashLog.shift(); if (v > 0) this.stats.totalRevenue += v; G.emit('cash', v); }
+  adjustCash(v, label, notRevenue) { if (!isFinite(v)) { console.error('adjustCash: valor no numérico', label, v); return; } this.cash += v; if (label) this.cashLog.push({ week: Math.floor(this.currentWeek), amount: v, label }); if (this.cashLog.length > 400) this.cashLog.shift(); if (v > 0 && !notRevenue) this.stats.totalRevenue += v; G.emit('cash', v); }
   adjustFans(v) { if (!isFinite(v)) { console.error('adjustFans: valor no numérico', v); return; } if (v > 0 && this.fans > 2e6) v *= 2e6 / this.fans; /* saturación desde 2 M: crecer cuesta cada vez más, pero nunca se para */ this.fans = Math.max(0, Math.round(this.fans + v)); if (!isFinite(this.fans)) this.fans = 0; }
   hasResearch(id) { return this.researchCompleted.includes(id); }
   canDevelopEngine() { return this.hasResearch('CustomEngine'); }
@@ -590,7 +596,7 @@ class Company {
   save() {
     const o = Object.assign({}, this); o.staff = this.staff.map(s => s.save());
     /* las colecciones antiguas (salvo las 10 últimas) se guardan sin el detalle de trabajo, que es el 80 % del peso; el desglose de la nota se conserva */
-    const n = this.gameLog.length; o.gameLog = this.gameLog.map((g, i) => { if (i >= n - 10 || !g.flags) return g; const f = Object.assign({}, g.flags); delete f.xpLog; delete f.reportData; delete f.taller; delete f.staffContribution; delete f.featureResponsibility; return Object.assign({}, g, { flags: f, featureLog: undefined }); }); return o;
+    const n = this.gameLog.length; o.gameLog = this.gameLog.map((g, i) => { if (i >= n - 10 || !g.flags || !g.soldOut || !g.flags.reportDone) return g; const f = Object.assign({}, g.flags); delete f.xpLog; delete f.taller; delete f.staffContribution; delete f.featureResponsibility; return Object.assign({}, g, { flags: f, featureLog: undefined }); }); return o;
   }
   static load(o) { const c = new Company(o.name, 'x'); Object.assign(c, o); c.staff = o.staff.map(s => new Character(s)); return c.repair(); }
 }
@@ -637,12 +643,12 @@ const G = {
   company: null, gameTime: 0, speed: 1, paused: true, currentFeature: null, featureQueue: [], currentEngineDev: null, currentContract: null, contracts: null, hireSearch: null, candidates: null,
   listeners: {}, points: [], lastResearchCheck: 0, pendingSliders: null, unreadLog: [],
   on(ev, fn) { (this.listeners[ev] = this.listeners[ev] || []).push(fn); },
-  emit(ev, data) { (this.listeners[ev] || []).forEach(fn => fn(data)); },
+  emit(ev, data) { (this.listeners[ev] || []).forEach(fn => { try { fn(data); } catch (e) { console.error(ev, e); } }); },
 
   /* ---------- inicio ---------- */
   newGame(companyName, playerName, startYear) {
     /* la partida anterior no se pierde: queda como copia («Recuperar partida anterior») */
-    if (this.company && this.company.cash >= -this.overdraftLimit() && !this.company.flags.sold) this.save(); try { const p = localStorage.getItem(G.SAVE_KEY); if (p && p.length < 1.2e6) localStorage.setItem(G.SAVE_KEY + '.bak', p); else localStorage.removeItem(G.SAVE_KEY + '.bak'); } catch (e) { /* sin espacio para la copia: no pasa nada */ }
+    if (this.company && this.company.cash >= -this.overdraftLimit() && !this.company.flags.sold) this.save(); this.backupFailed = false; try { const p = localStorage.getItem(G.SAVE_KEY); if (p) localStorage.setItem(G.SAVE_KEY + '.bak', p); } catch (e) { this.backupFailed = true; /* no cabe la copia: la UI avisa */ }
     this.removeOwnPlatforms();
     this.company = new Company(companyName, playerName, startYear); this.gameTime = 0; this.currentFeature = null; this.featureQueue = []; this.currentEngineDev = null; this.currentContract = null; this.contracts = null; this.hireSearch = null; this.candidates = null; this.points = []; this.unreadLog = [];
     this.paused = true; this.speed = 1; Modules.init(this.company);
@@ -694,7 +700,7 @@ const G = {
     if (this.hireSearch && w >= this.hireSearch.targetWeek && !this.candidates) { this.candidates = this.generateApplicants(this.hireSearch); this.notify('Candidatos', `Han llegado ${this.candidates.length} candidaturas para el puesto. Revísalas en el menú de personal.`, 'decision', { sourceId: 'hire' }); }
     if (this.currentContract && this.currentContract.type === 'generic' && w >= this.currentContract.deadlineWeek) this.finishContract(false);
     if (d.month === 1 && d.week === 1 && d.year > 1) this.yearlyAwards(d.year - 1);
-    if (d.month === 1 && d.week === 1 && (d.year === 36 || d.year === 71 || d.year === 106) && !co.flags['relevo' + d.year]) { co.flags['relevo' + d.year] = true; const best = this.bestHeirEmployee(); this.notify('Relevo generacional', `Han pasado ${d.year - 1} años desde que ${co.staff[0] ? co.staff[0].name : 'el fundador'} abrió el puesto. Toca decidir quién lleva la óptica a partir de ahora.`, 'decision', { sourceId: 'relevo', options: ['Lo coge mi hija o mi hijo', best ? `Se la dejo a ${best.name}` : 'Busco un gerente de fuera', 'Vender la óptica y retirarme'] }); }
+    if (d.month === 1 && d.week === 1 && (d.year === 36 || d.year === 71 || d.year === 106) && !co.flags['relevo' + d.year]) { co.flags['relevo' + d.year] = true; const best = this.bestHeirEmployee(); this.notify('Relevo generacional', `Han pasado ${d.year - 1} años desde que se abrió el puesto del mercado. Toca decidir quién lleva la óptica a partir de ahora.`, 'decision', { sourceId: 'relevo', options: ['Lo coge mi hija o mi hijo (talento parecido, menos experiencia, +3 % de clientes fieles)', best ? `Se la dejo a ${best.name} (ocupa tu puesto con su talento y deja una plaza libre)` : 'Busco un gerente de fuera (menos experiencia)', 'Vender la óptica y retirarme (fin de la partida: el patrimonio suma a la puntuación)'] }); }
     if (d.month === 1 && d.week === 1 && co.realYear() >= this.END_YEAR && !co.flags.end2076) { co.flags.end2076 = true; co.flags.endReason = 'fin'; this.notify(`Fin de la partida: ${this.END_YEAR}`, `Hemos llegado a ${this.END_YEAR}. Hora de hacer balance de toda la historia de ${co.name}.`, 'decision', { sourceId: 'gameend', options: ['Ver la puntuación final'] }); }
     if (d.year === 31 && d.month === 1 && d.week === 1 && !co.flags.endShown) { co.flags.endShown = true; this.notify('30 años de óptica', `Han pasado treinta años desde aquel puesto del mercado de ${co.startYear}. Es hora de hacer balance (la partida puede seguir hasta 2076).`, 'decision', { sourceId: 'gameend', options: ['Ver la puntuación final'] }); }
     this.randomEvents(w);
@@ -769,7 +775,7 @@ const G = {
   },
   checkTriggers() {
     const co = this.company; const idle = this.isIdle(); const now = this.gameTime; const cool = !co.flags.lastMoveQ || co.flags.lastMoveQ <= now - 20 * WEEK_MS;
-    const nl = this.nextLevelInfo(); if (idle && nl && nl.ok && cool && !co.flags['askedMove' + nl.level]) { co.flags.lastMoveQ = now; co.flags['askedMove' + nl.level] = true; this.notify(nl.title, nl.text + ` Coste: ${U.money(nl.cost)}. También puedes hacerlo cuando quieras desde el menú ☰ → Local.`, 'decision', { sourceId: 'level' + nl.level, options: [`Mudarse (${U.shortMoney(nl.cost)})`, 'Todavía no'] }); }
+    const nl = this.nextLevelInfo(); if (idle && nl && nl.ok && cool && !co.flags['askedMove' + nl.level]) { co.flags.lastMoveQ = now; co.flags['askedMove' + nl.level] = true; this.notify(nl.title, nl.text + ` Coste: ${U.money(nl.cost)}. También puedes hacerlo cuando quieras desde el Menú ☰ → Local y mudanza.`, 'decision', { sourceId: 'level' + nl.level, options: [`Mudarse (${U.shortMoney(nl.cost)})`, 'Todavía no'] }); }
     if (!co.flags.mediumContractsEnabled && co.level >= 2) co.flags.mediumContractsEnabled = true; if (!co.flags.largeContractsEnabled && co.level >= 3) co.flags.largeContractsEnabled = true;
     if (!co.flags.publishersEnabled && co.level >= 2 && co.gameLog.length >= 3) { co.flags.publishersEnabled = true; this.notify('Distribuidores', 'Las grandes cadenas y distribuidores empiezan a ofrecernos acuerdos: ellos pagan por adelantado y se quedan con la mayor parte de las ventas. Consulta los encargos.', 'news'); }
   },
@@ -784,17 +790,20 @@ const G = {
     const reasons = []; if (co.cash < def.cash) reasons.push(`caja mínima ${U.money(def.cash)} (tienes ${U.money(co.cash)})`); if (co.staff.length < def.staff) reasons.push(`${def.staff} persona${def.staff > 1 ? 's' : ''} en plantilla`); if (co.gameLog.length < def.games) reasons.push(`${def.games} colecciones lanzadas (llevas ${co.gameLog.length})`); if (!this.isIdle()) reasons.push('ningún proyecto en marcha');
     return Object.assign({ level: l, name: C.LEVELS[l].name, ok: reasons.length === 0, reasons }, def);
   },
-  /* desgaste por canal: cada lanzamiento suma 1 al canal y se recupera un 15 % cada mes; las ventas del canal se dividen entre (1 + 0,12·desgaste), mínimo ×0,7 */
+  /* desgaste por canal: cada lanzamiento suma 1 al canal y se recupera un 15 % cada mes; las ventas se dividen entre (1 + 0,06·desgaste), mínimo ×0,85 */
   wearOf(co, pid) { return (co && co.chanWear && co.chanWear[pid]) || 0; },
-  wearFactor(co, pid) { return Math.max(0.7, 1 / (1 + 0.12 * this.wearOf(co, pid))); },
+  wearFactor(co, pid) { return Math.max(0.85, 1 / (1 + 0.06 * this.wearOf(co, pid))); },
   decayWear(co) { if (!co.chanWear) return; for (const k of Object.keys(co.chanWear)) { co.chanWear[k] *= 0.85; if (co.chanWear[k] < 0.05) delete co.chanWear[k]; } },
+  /* consultoría de I+D: convierte dinero en puntos de investigación, cada compra un 35 % más cara (desde la óptica con gabinete) */
+  rpCost(co) { return Math.round(60000 * Math.pow(1.35, (co.flags && co.flags.rpBought) || 0)); },
+  buyResearchPoints() { const co = this.company; if (!co || co.level < 3) return false; const c = this.rpCost(co); if (!this.canSpend(c)) return false; co.adjustCash(-c, 'Consultoría de I+D'); co.researchPoints += 25; co.flags.rpBought = (co.flags.rpBought || 0) + 1; this.emit('refresh'); return true; },
   /* red de ópticas (sumidero de dinero en la insignia): cada sucursal cuesta más y rinde algo menos que la anterior */
   BRANCH_MAX: 12,
   branchCost(n) { return Math.round(5e6 * Math.pow(1.4, n)); },
   branchIncome(co, i) { return Math.round(Math.min(500000, 150000 + (co.fans || 0) * 0.05) * Math.pow(0.92, i)); },
   branchUpkeep: 60000,
   branchesNet(co) { let n = 0; for (let i = 0; i < (co.branches || 0); i++) n += this.branchIncome(co, i) - this.branchUpkeep; return n; },
-  openBranch() { const co = this.company; const n = co.branches || 0; if (co.level < 4 || n >= this.BRANCH_MAX) return false; const c = this.branchCost(n); if (!this.canSpend(c)) return false; co.adjustCash(-c, 'Nueva sucursal'); co.stats.branchSpend = (co.stats.branchSpend || 0) + c; co.branches = n + 1; co.adjustFans(Math.round(co.fans * 0.03) + 2000); this.log(`🏪 Abrimos la sucursal n.º ${co.branches} de ${co.name}.`); this.emit('refresh'); return true; },
+  openBranch() { const co = this.company; const n = co.branches || 0; if (co.level < 4 || n >= this.BRANCH_MAX) return false; const c = this.branchCost(n); if (!this.canSpend(c)) return false; co.adjustCash(-c, 'Nueva sucursal'); co.stats.branchSpend = (co.stats.branchSpend || 0) + c; co.branches = n + 1; if (co.branches <= 3) { co.maxStaff++; this.log(`👥 Con la nueva sucursal cabe una persona más en la plantilla (${co.maxStaff}).`); } co.adjustFans(Math.round(co.fans * 0.03) + 2000); this.log(`🏪 Abrimos la sucursal n.º ${co.branches} de ${co.name}.`); this.emit('refresh'); return true; },
   moveToLevel(l) {
     const co = this.company; const cost = l === 4 ? 4e6 : 150000; co.adjustCash(-cost, 'Nuevo local'); co.level = l; co.maxStaff = C.LEVELS[l].maxStaff;
     const txt = { 2: 'Nos hemos mudado al local comercial. Ya podemos contratar hasta 4 empleados (menú Personal) e investigar colecciones medianas.', 3: 'Reforma terminada: ahora tenemos gabinete optométrico (investígalo para empezar a recibir pacientes), sala de formación y un taller mejor equipado. Hay nuevos cursos disponibles.', 4: 'Bienvenidos a la óptica insignia. Hasta 6 empleados, laboratorio de I+D y mucho más espacio.' }[l];
@@ -864,11 +873,11 @@ const G = {
   },
   finishResearch(staff, r) {
     const co = this.company; staff.state = 'idle'; staff.currentResearch = null; const it = DB.item(r.id);
-    if (it.isTopic) { co.topics.push(r.topicId); this.notify('Investigación', `Ya dominamos el estilo "${DB.topic(r.topicId).name}".`); }
+    if (it.isTopic) { co.topics.push(r.topicId); this.notify('Investigación', `Ya dominamos el estilo «${DB.topic(r.topicId).name}».`); }
     else {
       co.researchCompleted.push(it.id); co.availableResearch = co.availableResearch.filter(x => x !== it.id);
       if (typeof it.onComplete === 'function') { try { it.onComplete(co); } catch (e) { console.error('onComplete', it.id, e); } }
-      Modules.call('onResearch', co, it); let extra = ''; if (it.id === 'CustomEngine') extra = ' Ya puedes crear líneas de producción propias (menú Taller) e investigar tecnologías.'; if (it.id === 'Marketing') extra = ' Durante el desarrollo de una colección podrás contratar campañas.';
+      Modules.call('onResearch', co, it); let extra = ''; if (it.id === 'CustomEngine') extra = ' Ya puedes crear líneas de producción propias (botón ⚙️ Líneas) e investigar tecnologías.'; if (it.id === 'Marketing') extra = ' Durante el desarrollo de una colección podrás contratar campañas.';
       if (it.big) this.notify('Laboratorio I+D', `Proyecto terminado: ${it.name}. ${it.desc || ''}${it.id === 'RnDLab' ? ' En el menú Investigar aparecerán los proyectos del laboratorio a medida que cumplas sus requisitos.' : ''}`);
       else this.notify('Investigación completada', `${it.name} investigado.${extra}`);
     }
@@ -884,7 +893,7 @@ const G = {
   finishEngine() {
     const co = this.company; const E = this.currentEngineDev; if (!E) return; this.currentEngineDev = null;
     co.engines.push({ id: U.guid(), name: E.name, parts: E.parts, createdWeek: Math.floor(co.currentWeek) }); for (const s of co.staff) if (s.state === 'working') s.state = 'idle';
-    this.notify('Taller', `La línea de producción "${E.name}" está lista. Úsala en tu próxima colección.`); this.emit('refresh');
+    this.notify('Taller', `La línea de producción «${E.name}» está lista. Úsala en tu próxima colección.`); this.emit('refresh');
   },
 
   /* ---------- colecciones: creación y pipeline ---------- */
@@ -968,7 +977,7 @@ const G = {
     this.notify('Reseñas', `¡Han llegado las primeras reseñas de ${g.title}!`, 'decision', { sourceId: 'reviews', game: g });
     { const i = co.notifications.findIndex(n => n.sourceId === 'reviews' && n.game === g); if (i > q0) co.notifications.splice(q0, 0, co.notifications.splice(i, 1)[0]); } /* el veredicto no se adelanta a la crítica */
     g.flags.cfWeek = Math.floor(co.currentWeek) + 4 + Math.floor(4 * U.rnd()); /* las copias aparecen cuando la colección ya se vende, no el día del lanzamiento */
-    if (co.gameLog.length === 1) this.notify('Noticias', `Una pequeña óptica llamada ${co.name} ha presentado su primera colección, "${g.title}". El sector mira con curiosidad.`, 'sales');
+    if (co.gameLog.length === 1) this.notify('Noticias', `Una pequeña óptica llamada ${co.name} ha presentado su primera colección, «${g.title}». El sector mira con curiosidad.`, 'sales');
     if (co.gameLog.length === 1) this.notify('Investigación', `Ya podemos investigar (botón Investigar). Tenemos ${co.researchPoints} 🔬: un estilo nuevo cuesta 10 y el taller propio 50. Mientras investigas no se avanza en colecciones: hazlo entre una y otra.`);
     this.emit('refresh');
   },
@@ -1045,7 +1054,7 @@ const G = {
     apply('technologyFactor', tr.tF, 'T'); apply('designFactor', tr.dF, 'D'); apply('researchFactor', tr.rF, 'I'); apply('speedFactor', tr.sF, 'Vel');
     if (tr.skill) { ch.skills = ch.skills || {}; ch.skills[tr.skill] = true; gains.push('certificación en ' + String(tr.skill).replace(/_/g, ' ')); }
     ch.flags.trainingsDone = ch.flags.trainingsDone || []; ch.flags.trainingsDone.push(tr.id); Modules.call('onTraining', this.company, ch, tr);
-    this.notify('Formación', `${ch.name} ha terminado "${tr.name}". ${gains.length ? gains.join(', ') : 'No ha mejorado (ya domina la materia).'}`); this.emit('refresh');
+    this.notify('Formación', `${ch.name} ha terminado «${tr.name}». ${gains.length ? gains.join(', ') : 'No ha mejorado (ya domina la materia).'}`); this.emit('refresh');
   },
 
   /* ---------- encargos ---------- */
@@ -1076,8 +1085,8 @@ const G = {
   updateContractProgress() { const c = this.currentContract; if (c.spawnedD >= c.requiredD && c.spawnedT >= c.requiredT && !this.points.length) this.finishContract(true); },
   finishContract(ok) {
     const co = this.company; const c = this.currentContract; this.currentContract = null; for (const s of co.staff) if (s.state === 'working') s.state = 'idle';
-    if (ok) { co.adjustCash(c.payment, 'Encargo: ' + c.name); this.notify('Encargo completado', `${c.name}: "${U.pick(['Gracias por encargaros de esto.', 'Buen trabajo.', 'Justo lo que queríamos.', 'Excelente trabajo.'])}" Cobramos ${U.money(c.payment)}.`); }
-    else { co.adjustCash(-c.penalty, 'Penalización: ' + c.name); this.notify('Encargo fallido', `No hemos cumplido el plazo de "${c.name}". Penalización: ${U.money(c.penalty)}.`); }
+    if (ok) { co.adjustCash(c.payment, 'Encargo: ' + c.name); this.notify('Encargo completado', `${c.name}: «${U.pick(['Gracias por encargaros de esto.', 'Buen trabajo.', 'Justo lo que queríamos.', 'Excelente trabajo.'])}» Cobramos ${U.money(c.payment)}.`); }
+    else { co.adjustCash(-c.penalty, 'Penalización: ' + c.name); this.notify('Encargo fallido', `No hemos cumplido el plazo de «${c.name}». Penalización: ${U.money(c.penalty)}.`); }
     this.emit('refresh');
   },
   finishPublisherContract(ok, g) {
@@ -1132,7 +1141,7 @@ const G = {
     for (const mid in fr) {
       const ch = co.staff.find(s => String(s.id) === String(fr[mid])); if (!ch || !DB.mission(mid)) continue;
       ch.flags.responsibilityCount = ch.flags.responsibilityCount || {}; const n = (ch.flags.responsibilityCount[mid] || 0) + 1; ch.flags.responsibilityCount[mid] = n;
-      if (n >= 5 && !ch.flags.expert) { ch.flags.expert = mid; const m = DB.mission(mid); this.notify('Especialista', this.withTip(`${ch.name} lleva ${n} colecciones al frente de "${m.name}" y se ha convertido en especialista. Al liderar ese campo rendirá más, y las colecciones insignia necesitan especialistas en sus campos clave.`, 'expert', { name: ch.name, field: m.name })); }
+      if (n >= 5 && !ch.flags.expert) { ch.flags.expert = mid; const m = DB.mission(mid); this.notify('Especialista', this.withTip(`${ch.name} lleva ${n} colecciones al frente de «${m.name}» y se ha convertido en especialista. Al liderar ese campo rendirá más, y las colecciones insignia necesitan especialistas en sus campos clave.`, 'expert', { name: ch.name, field: m.name })); }
     }
   },
 
@@ -1218,7 +1227,7 @@ const G = {
     if (a.balance === 'moreDesign') lines.push(`Las ${gName} piden más diseño que técnica: el equilibrio se quedó corto de diseño.`); else if (a.balance === 'moreTech') lines.push(`Las ${gName} piden más técnica que diseño: nos faltó parte técnica.`); else if (a.balance === 'ok') lines.push(`El equilibrio entre diseño y técnica fue el ideal para una colección ${gName}.`);
     co.knowledge._combos = co.knowledge._combos || {}; const ck = g.topic + '|' + g.genre; if (co.knowledge._combos[ck] === undefined) { co.knowledge._combos[ck] = a.topicW; lines.push(`${tName} + ${gName}: una combinación ${this.comboAdjective(a.topicW)}.`); }
     if (a.plats.length && a.pw <= 0.7) lines.push(`Las colecciones ${gName} no tienen mucho público en ${a.plats[0].name}.`); else if (a.plats.length && a.pw > 1) lines.push(`${a.plats[0].name} es un canal estupendo para las colecciones ${gName}.`);
-    if (g.targetAudience && a.aw <= 0.7) { const au = DATA.AUDIENCES.find(x => x.id === g.targetAudience); lines.push(`El público "${au ? au.name : g.targetAudience}" no acaba de conectar con el estilo ${tName}.`); }
+    if (g.targetAudience && a.aw <= 0.7) { const au = DATA.AUDIENCES.find(x => x.id === g.targetAudience); lines.push(`El público «${au ? au.name : g.targetAudience}» no acaba de conectar con el estilo ${tName}.`); }
     if (a.bugsA < 0.9) lines.push('Salió con demasiados defectos: más tiempo de control de calidad al final habría subido la nota.');
     /* como el informe de GDT: caras nuevas y equipo disperso */
     if (g.flags.newStaffIds && g.flags.newStaffIds.length) { const nn = g.flags.newStaffIds.map(id => co.staff.find(s => String(s.id) === String(id))).filter(Boolean).map(s => s.name.split(' ')[0]); if (nn.length) lines.push(`${nn.length === 1 ? nn[0] + ' todavía es nuevo/a en el equipo' : nn.join(', ') + ' todavía son nuevos en el equipo'}: un par de colecciones más y rendirán al máximo.`); }
@@ -1285,7 +1294,9 @@ const G = {
     const txt = JSON.stringify(data); try { localStorage.setItem(G.SAVE_KEY, txt); return true; } catch (e) { try { localStorage.removeItem(G.SAVE_KEY + '.bak'); localStorage.setItem(G.SAVE_KEY, txt); return true; } catch (e2) { console.error(e2); this.saveFailed = true; return false; } }
   },
   load() {
-    try { const raw = localStorage.getItem(G.SAVE_KEY); if (!raw) return false; const d = JSON.parse(raw); this.removeOwnPlatforms(); this.company = Company.load(d.company); this.gameTime = d.gameTime; this.currentFeature = d.currentFeature; this.featureQueue = d.featureQueue || []; this.currentEngineDev = d.currentEngineDev; this.currentContract = d.currentContract; this.contracts = d.contracts; this.hireSearch = d.hireSearch; this.candidates = d.candidates; this.unreadLog = d.unreadLog || []; this.points = []; this.paused = true; this.modalOpen = false; for (const p of this.company.ownPlatforms) this.addOwnPlatform(p, true); Modules.init(this.company); if (this.company.maxStaff < C.LEVELS[this.company.level].maxStaff) this.company.maxStaff = C.LEVELS[this.company.level].maxStaff; this.company.notifications = this.company.notifications.filter(n => n.sourceId !== 'sliders'); if (this.company.currentGame && !this.currentFeature && !this.featureQueue.length && this.company.currentGame.stage < 3) { this.modalOpen = true; this.emit('sliders', this.company.currentGame.stage + 1); } this.emit('newgame'); this.emit('refresh'); if (this.company.flags && this.company.flags.sold) setTimeout(() => this.emit('gameend'), 0); return true; } catch (e) { console.error(e); return false; }
+    try { const raw = localStorage.getItem(G.SAVE_KEY); if (!raw) return false; const d = JSON.parse(raw); const nco = Company.load(d.company);
+      if (!nco || !C.LEVELS[nco.level] || !Array.isArray(nco.staff) || !nco.staff.length || !Array.isArray(nco.gameLog) || !Array.isArray(nco.engines) || !nco.engines.length) throw new Error('partida no válida');
+      this.removeOwnPlatforms(); this.company = nco; this.gameTime = Number.isFinite(d.gameTime) ? d.gameTime : 0; this.currentFeature = d.currentFeature; this.featureQueue = d.featureQueue || []; this.currentEngineDev = d.currentEngineDev; this.currentContract = d.currentContract; this.contracts = d.contracts; this.hireSearch = d.hireSearch; this.candidates = d.candidates; this.unreadLog = d.unreadLog || []; this.points = []; this.paused = true; this.modalOpen = false; for (const p of this.company.ownPlatforms) this.addOwnPlatform(p, true); Modules.init(this.company); { const want = C.LEVELS[this.company.level].maxStaff + (this.company.level >= 4 ? Math.min(3, this.company.branches || 0) : 0); if (this.company.maxStaff < want) this.company.maxStaff = want; } this.company.notifications = this.company.notifications.filter(n => n.sourceId !== 'sliders'); if (this.company.currentGame && !this.currentFeature && !this.featureQueue.length && this.company.currentGame.stage < 3) { this.modalOpen = true; this.emit('sliders', this.company.currentGame.stage + 1); } this.emit('newgame'); this.emit('refresh'); if (this.company.flags && this.company.flags.sold) setTimeout(() => this.emit('gameend'), 0); return true; } catch (e) { console.error(e); return false; }
   },
   hasSave() { try { return !!localStorage.getItem(G.SAVE_KEY); } catch (e) { return false; } },
   hasBackup() { try { return !!localStorage.getItem(G.SAVE_KEY + '.bak'); } catch (e) { return false; } },
@@ -1298,8 +1309,8 @@ const G = {
     let d; try { d = JSON.parse(text); } catch (e) { return 'El archivo no es una partida válida.'; }
     if (!d || typeof d !== 'object' || !d.company || typeof d.company !== 'object' || !Array.isArray(d.company.staff) || !Array.isArray(d.company.gameLog) || typeof d.company.name !== 'string') return 'El archivo no es una partida de Óptica Tycoon.';
     let prev = null; try { prev = localStorage.getItem(G.SAVE_KEY); localStorage.setItem(G.SAVE_KEY, text); } catch (e) { return 'El navegador no deja guardar datos (modo privado o sin espacio).'; }
-    if (this.load()) return null;
-    try { if (prev) localStorage.setItem(G.SAVE_KEY, prev); else localStorage.removeItem(G.SAVE_KEY); } catch (e) { /* nada */ } return 'No se pudo cargar esa partida.'; },
+    if (this.load()) { try { if (prev) localStorage.setItem(G.SAVE_KEY + '.bak', prev); } catch (e) { /* sin espacio */ } return null; }
+    try { if (prev) localStorage.setItem(G.SAVE_KEY, prev); else localStorage.removeItem(G.SAVE_KEY); } catch (e) { /* nada */ } if (prev && this.company) this.load(); return 'No se pudo cargar esa partida.'; },
   /* borra la partida guardada (y restos de versiones anteriores) */
   deleteSave() { try { for (const k of ['opticaTycoon.save', 'opticaTycoon.v2', 'opticaTycoon.v3', G.SAVE_KEY, G.SAVE_KEY + '.bak']) localStorage.removeItem(k); return true; } catch (e) { return false; } }
 };
