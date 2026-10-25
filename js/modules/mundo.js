@@ -188,9 +188,9 @@
         { label: d => `Pasarse a LED (${money(d.led)})`, cost: d => d.led, costLabel: 'Iluminación LED', run(co, X, d) { X.cash(-d.bill, 'Factura de la luz'); X.stream(d.save, 36, 'Ahorro con LED'); X.units({ all: true }, 0.03, 24, 'de todas las colecciones'); return 'LED de alta reproducción cromática y temporizadores: factura a la baja y monturas que lucen mejor.'; } },
         { label: () => 'Apagar medio escaparate', run(co, X, d) { X.cash(-d.bill, 'Factura de la luz'); X.stream(d.half, 12, 'Ahorro apagando focos'); X.units({ all: true }, -0.04, 24, 'de todas las colecciones'); return 'Medio escaparate a oscuras desde las nueve. Ahorramos, pero se nota desde la acera.'; } }
       ] },
-    { id: 'aniversario', ev: 'EV_50', kind: 'fixed', year: 2026, month: 10, title: 'Gala de aniversario',
-      prep: co => ({ expo: sc(co, 5000), ed: sc(co, 25000) }),
-      text: () => 'La Cámara de Comercio y el Colexio Oficial de Ópticos-Optometristas de Galicia nos rinden homenaje por más de tres décadas de oficio. En una vitrina brilla la primera gafa que vendimos en el mercadillo, allá por 1995.',
+    { id: 'aniversario', ev: 'EV_50', kind: 'fixed', year: 2026, month: 10, title: 'Gala de aniversario', when: co => (co.startYear || 1995) <= 1996,
+      prep: co => ({ expo: sc(co, 5000), ed: sc(co, 25000), sy: co.startYear || 1995 }),
+      text: (co, d) => `La Cámara de Comercio y el Colexio Oficial de Ópticos-Optometristas de Galicia nos rinden homenaje por ${Math.floor((2026 - ((d && d.sy) || 1995)) / 10)} décadas de oficio. En una vitrina brilla la primera gafa que vendimos en el mercadillo, allá por ${(d && d.sy) || 1995}.`,
       opts: [
         { label: d => `Exposición y dos becas (${money(d.expo)})`, cost: d => d.expo, costLabel: 'Exposición del aniversario', run(co, X) { X.brand(5); X.rep(5); X.fans(300, 0.02); return 'Retrospectiva abierta a toda la ciudad y dos becas para estudiantes de Óptica en Santiago.'; } },
         { label: () => 'Edición limitada «1995-2026»', run(co, X, d) { X.cash(d.ed, 'Edición limitada del aniversario'); X.hype(20); return 'Titanio y acetato numerados: se agotan antes de que acabe la gala.'; } }
@@ -205,7 +205,7 @@
         { label: () => 'Recoger antes', run(co, X, d) { X.cash(-d.lost, 'Ventas perdidas en la feria'); X.morale(0.05); return 'Recogemos dos horas antes: menos ventas, pero nadie acaba empapado.'; } },
         { label: () => 'Aguantar el toldo', run(co, X, d) { if (U.rnd() < 0.5) { X.cash(d.gain, 'Ventas en la feria'); return 'Aguantamos el toldo casi con los dientes y la gente compra por pura admiración.'; } X.cash(-d.dmg, 'Género dañado por la lluvia'); return 'Una ráfaga se lleva medio expositor: varias gafas acaban en un charco.'; } }
       ] },
-    { id: 'betanzos_medieval', ev: '§9', kind: 'random', title: 'Mercado Medieval de Betanzos', maxL: 1, win: d => d.month === 7 && (d.week === 2 || d.week === 3), p: 0.45, repeat: { gap: 2, max: 3 },
+    { id: 'betanzos_medieval', ev: '§9', kind: 'random', title: 'Mercado Medieval de Betanzos', maxL: 1, minY: 1997, win: d => d.month === 7 && (d.week === 2 || d.week === 3), p: 0.45, repeat: { gap: 2, max: 3 },
       prep: co => ({ cost: sc(co, 400), inc: sc(co, 1500 + Math.round(1500 * U.rnd())) }),
       text: () => 'A mediados de julio, el casco histórico de Betanzos se llena de gaiteros, artesanos y turistas con el Mercado Medieval. La organización aún tiene un hueco para un puesto, y unas gafas de sol redondas «de inspiración artesanal» encajarían de maravilla.',
       opts: [

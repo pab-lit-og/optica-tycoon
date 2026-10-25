@@ -43,9 +43,17 @@ const Advisor = {
     if (tired.length) add(90, '😴', `${tired.length === 1 ? tired[0].name.split(' ')[0] + ' necesita' : tired.length + ' personas necesitan'} vacaciones`, 'Cansados rinden mucho menos y meten más defectos. Mándalos de vacaciones entre colecciones.', 'staff');
     // 3. sin proyecto
     if (idle && !co.currentGame && !G.currentEngineDev) {
-      const team = co.staff.filter(s => !s.assignment).length; const sizes = co.availableSizes(); const best = sizes.filter(sz => C.SIZE[sz].optimalTeam <= Math.max(1, team)).pop() || 'small';
+      const team = co.staff.filter(s => !s.assignment).length; const sizes = co.availableSizes(); let best = sizes.filter(sz => C.SIZE[sz].optimalTeam <= Math.max(1, team)).pop() || 'small'; if (co.level >= 2 && best === 'small' && sizes.includes('medium')) best = 'medium';
       add(85, '👓', 'Empieza una colección', `No hay nada en marcha. Con ${team} persona${team === 1 ? '' : 's'} en diseño, el tamaño que mejor rinde es ${C.SIZE[best].label.toLowerCase()}.`, 'newgame');
     }
+    // 3b. tamaño: desde el local comercial las pequeñas restan nota; si falta gente en diseño, traerla de un departamento
+    if (co.level >= 2 && co.hasResearch('MediumSizeGames')) { const team = co.staff.filter(s => !s.assignment).length; const inDept = co.staff.length - team; const opt = C.SIZE.medium.optimalTeam;
+      if (team < opt && inDept > 0) add(66, '🧑‍🎨', `Faltan diseñadores para colecciones medianas (${team}/${opt})`, `En ${C.LEVELS[co.level].name.toLowerCase()} las colecciones pequeñas restan un 10 % de nota. Pasa a diseño a alguien de un departamento o contrata (ficha del empleado → Destino).`, 'staff'); }
+    // 3c. la última colección: causa principal de la nota y qué hacer
+    { const lg = co.gameLog[co.gameLog.length - 1]; const bd = lg && lg.flags && lg.flags.breakdown;
+      if (bd && co.currentWeek - (lg.releaseWeek || 0) < 24 && lg.score < 7.5) { const worst = (bd.rows || []).filter(r => r.f < 0.97).sort((a, b) => a.f - b.f)[0];
+        const tip = worst ? ({ time: 'da más tiempo a los campos clave del tipo en cada fase (los informes los marcan con ☆)', balance: 'equilibra diseño y técnica (mira si faltó diseño o técnica)', channel: 'elige un canal que encaje mejor con el tipo (estrellas en el asistente)', audience: 'cambia el público o el estilo', chanaud: 'ese canal apenas llega a ese público', bugs: 'deja que el control de calidad llegue a 0 defectos', other: 'no repitas la misma combinación seguida', combo: 'ese estilo no pega con ese tipo', trend: 'la moda iba en contra: prueba otro estilo', mix: 'no mezcles canales muy distintos', tech: lg.flags.techWhy === 'small' ? 'pasa a colecciones medianas' : lg.flags.techWhy === 'medium' ? 'consigue más clientes fieles (20.000) o crea una línea de producción nueva' : 'crea una línea de producción con tus tecnologías más nuevas' }[worst.k] || '') : (bd.base < 6 ? 'genera más puntos: más gente en diseño, tamaño acorde y personal descansado' : '');
+        if (tip) add(64, '📉', `${lg.title}: ${lg.score.toFixed(1)}${worst ? ' · lo que más restó: ' + worst.label.toLowerCase() : ''}`, 'Para la próxima: ' + tip + '.', null); } }
     // 4. mudanza
     const nl = G.nextLevelInfo && G.nextLevelInfo();
     if (nl && nl.ok) add(88, '🏢', `¡Ya puedes pasar a ${nl.name}!`, 'Cumples todos los requisitos. Más espacio, más personal y nuevos departamentos.', 'local');

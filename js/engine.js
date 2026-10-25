@@ -580,7 +580,7 @@ class Company {
   realYear() { return this.getCurrentDate().year + this.startYear - 1; }
   playedAtLeast(y, m) { return Math.floor(this.currentWeek) >= U.weekFromDate(`${y}/${m || 1}/1`); } /* tiempo jugado (hitos de progresión, como en GDT) */
   adjustCash(v, label) { if (!isFinite(v)) { console.error('adjustCash: valor no numérico', label, v); return; } this.cash += v; if (label) this.cashLog.push({ week: Math.floor(this.currentWeek), amount: v, label }); if (this.cashLog.length > 400) this.cashLog.shift(); if (v > 0) this.stats.totalRevenue += v; G.emit('cash', v); }
-  adjustFans(v) { if (!isFinite(v)) { console.error('adjustFans: valor no numérico', v); return; } this.fans = Math.max(0, Math.round(this.fans + v)); if (!isFinite(this.fans)) this.fans = 0; }
+  adjustFans(v) { if (!isFinite(v)) { console.error('adjustFans: valor no numérico', v); return; } if (v > 0 && this.fans > 1e6) v *= Math.max(0, 1 - (this.fans - 1e6) / 2.9e7); /* saturación a partir del millón: el mercado no es infinito */ this.fans = Math.max(0, Math.round(this.fans + v)); if (!isFinite(this.fans)) this.fans = 0; }
   hasResearch(id) { return this.researchCompleted.includes(id); }
   canDevelopEngine() { return this.hasResearch('CustomEngine'); }
   canSetTargetAudience() { return this.hasResearch('TargetAudience'); }
@@ -639,14 +639,17 @@ const G = {
   /* ---------- inicio ---------- */
   newGame(companyName, playerName, startYear) {
     /* la partida anterior no se pierde: queda como copia («Recuperar partida anterior») */
-    if (this.company) this.save(); try { const p = localStorage.getItem(G.SAVE_KEY); if (p) localStorage.setItem(G.SAVE_KEY + '.bak', p); } catch (e) { /* sin almacenamiento */ }
+    if (this.company && this.company.cash >= -this.overdraftLimit() && !this.company.flags.sold) this.save(); try { const p = localStorage.getItem(G.SAVE_KEY); if (p) localStorage.setItem(G.SAVE_KEY + '.bak', p); } catch (e) { /* sin almacenamiento */ }
     this.removeOwnPlatforms();
     this.company = new Company(companyName, playerName, startYear); this.gameTime = 0; this.currentFeature = null; this.featureQueue = []; this.currentEngineDev = null; this.currentContract = null; this.contracts = null; this.hireSearch = null; this.candidates = null; this.points = []; this.unreadLog = [];
     this.paused = true; this.speed = 1; Modules.init(this.company);
     /* las partidas que empiezan en 2026 arrancan con un mercado del tamaño del de 1995 (si no, serían un paseo); el crecimiento posterior se mantiene */
     { const co = this.company; const tot = sh => { const save = co.startYear; co.startYear = sh; const t = Platforms.onMarket(0).reduce((s, p) => s + Platforms.rawMarketSize(p, 0), 0); co.startYear = save; return t; };
-      const t95 = tot(1995), t0 = tot(co.startYear); co.marketScale = t0 > t95 ? t95 / t0 : 1; }
-    const sy = this.company.startYear; this.notify('Bienvenido', DATA.NEWS[0].text.replace('Es 1995.', `Es ${sy}.`).replace('Envolvente → Deportiva', sy < 1984 ? 'Glaciar → Deportiva' : 'Envolvente → Deportiva') + (G.ERA_INTRO[sy] ? ' ' + G.ERA_INTRO[sy] : '')); this.company.scheduledShown.push('1/1/1');
+      const t95 = tot(1995), t0 = tot(co.startYear);
+      /* y que el mercado gratuito del principio (tienda + mercadillos) sea al menos el 40 % del de 1995: sin eso, 1985 y 2026 llevaban a la quiebra */
+      const free = sh => { const save = co.startYear; co.startYear = sh; const t = Platforms.onMarket(0).filter(p => co.licencedPlatforms.includes(p.id)).reduce((s, p) => s + Platforms.rawMarketSize(p, 0), 0); co.startYear = save; return t; };
+      const f95 = free(1995), f0 = free(co.startYear); co.marketScale = Math.max(t0 > t95 ? t95 / t0 : 1, f0 > 0 ? Math.min(3, 0.4 * f95 / f0) : 1); if (co.startYear === 1995) co.marketScale = 1; }
+    const sy = this.company.startYear; this.notify('Bienvenido', DATA.NEWS[0].text.replace('Es 1995.', `Es ${sy}.`).replace('70.000 € ahorrados', sy < 2002 ? 'unos ahorros equivalentes a 70.000 € de hoy' : '70.000 € ahorrados').replace(/\(Aviador[^)]*\)/, '(' + this.company.topics.slice(0, 3).map(t => { const tp = DB.topic(t); let bi = 0; tp.gw.slice(0, 6).forEach((v, i) => { if (v > tp.gw[bi]) bi = i; }); return tp.name + ' → ' + DATA.GENRES[bi].name; }).join(', ') + ')') + (G.ERA_INTRO[sy] ? ' ' + G.ERA_INTRO[sy] : '')); this.company.scheduledShown.push('1/1/1');
     this.emit('newgame'); this.emit('refresh');
   },
 
@@ -677,13 +680,14 @@ const G = {
     this.offerReports(w); this.checkBoosts(w);
     for (const g of co.gameLog) if (g.flags && g.flags.cfWeek && w >= g.flags.cfWeek) { delete g.flags.cfWeek; if (!g.soldOut) this.checkCounterfeit(g); }
     Modules.call('weekly', co, w, d);
-    if (d.week === 1) { const b = General.monthlyCosts(co); co.adjustCash(-b, 'Gastos mensuales'); if (co.currentGame) co.currentGame.costs += b; if (!Modules.get('gabinete')) this.gabineteIncome(); this.subscriptionIncome(); Modules.call('monthly', co, d); if (co.cash >= -this.overdraftLimit()) this.emit('autosave'); }
+    if (d.week === 1) { const b = General.monthlyCosts(co); co.adjustCash(-b, 'Gastos mensuales'); if (co.currentGame) co.currentGame.costs += b; if (!Modules.get('gabinete')) this.gabineteIncome(); this.subscriptionIncome(); Modules.call('monthly', co, d); }
     if (d.month === 1 && d.week === 1 && d.year > 1) { const ry = U.realYear(d.year); const nuevos = DATA.TOPICS.filter(t => t.year === ry); if (nuevos.length) this.log(`🆕 Nuevos estilos en el mercado (${ry}): ${nuevos.map(t => t.name).join(', ')}. Ya se pueden investigar.`); }
     Trends.update(co);
-    if (co.level > 1 && d.month === 5 && d.week === 1 && d.year > 7) this.notify('IberÓptica', 'La feria IberÓptica (Madrid) se celebra en junio: ópticas, laboratorios y fabricantes de toda la península. ¿Reservamos un stand?', 'decision', { sourceId: 'booth' });
+    if (co.startYear !== 1995 && d.week === 1) { if (!co.flags.targetAudienceStory && co.playedAtLeast(2, 6)) { co.flags.targetAudienceStory = true; this.notify('Público objetivo', 'Los estudios de mercado empiezan a segmentar las ventas de gafas por edades. Investigar «Público objetivo» permitiría orientar mejor cada colección.'); } if (!co.flags.marketingStory && co.playedAtLeast(3, 4)) { co.flags.marketingStory = true; this.notify('Publicidad', 'Las revistas de moda lanzan secciones de óptica. Investigar «Marketing» permitiría anunciar las colecciones antes de su lanzamiento.'); } }
+    if (co.level > 1 && d.month === 5 && d.week === 1 && co.realYear() >= 2001) this.notify('IberÓptica', 'La feria IberÓptica (Madrid) se celebra en junio: ópticas, laboratorios y fabricantes de toda la península. ¿Reservamos un stand?', 'decision', { sourceId: 'booth' });
     else if (d.month === 6 && d.week === 2 && co.conferenceStandFactor) this.runConference();
-    for (const p of DATA.PLATFORMS) { if (Platforms.publishWeek(p) === U.absWeek(w) && w > 0) { this.notify('Noticias del canal', `Hoy se abre un nuevo canal de venta: ${p.name} (${p.company}).` + (p.licencePrize ? ` Licencia: ${U.money(p.licencePrize)}.` : ''), 'news'); if (p.licencePrize === 0 && !co.licencedPlatforms.includes(p.id)) co.licencedPlatforms.push(p.id); } if (Platforms.retireWeek(p) === w) this.notify('Noticias del canal', `${p.name} cierra sus puertas. Ya no se pueden lanzar colecciones ahí.`, 'news'); }
-    for (const n of DATA.NEWS) { if (U.weekFromDate(n.date) === U.absWeek(w) && !co.scheduledShown.includes(n.date)) { co.scheduledShown.push(n.date); if (n.flag) co.flags[n.flag] = true; this.notify(n.title, n.text, 'news'); } }
+    for (const p of DATA.PLATFORMS) { if (Platforms.publishWeek(p) === U.absWeek(w) && w > 0) { this.notify('Noticias del canal', `Hoy se abre un nuevo canal de venta: ${p.name} (${p.company}).` + (p.licencePrize ? ` Licencia: ${U.money(p.licencePrize)}.` : ''), 'news'); if (p.licencePrize === 0 && !co.licencedPlatforms.includes(p.id)) co.licencedPlatforms.push(p.id); } if (Platforms.retireWeek(p) === U.absWeek(w) && w > 0 && (U.startYear() < 1995 || !p.pastOnly) && Platforms.publishWeek(p) < U.absWeek(w)) this.notify('Noticias del canal', `${p.name} cierra sus puertas. Ya no se pueden lanzar colecciones ahí.`, 'news'); }
+    for (const n of DATA.NEWS) { if (n.classic && co.startYear !== 1995) continue; if (U.weekFromDate(n.date) === U.absWeek(w) && !co.scheduledShown.includes(n.date)) { co.scheduledShown.push(n.date); if (n.flag) co.flags[n.flag] = true; this.notify(n.title, n.text, 'news'); } }
     if (this.hireSearch && w >= this.hireSearch.targetWeek && !this.candidates) { this.candidates = this.generateApplicants(this.hireSearch); this.notify('Candidatos', `Han llegado ${this.candidates.length} candidaturas para el puesto. Revísalas en el menú de personal.`, 'decision', { sourceId: 'hire' }); }
     if (this.currentContract && this.currentContract.type === 'generic' && w >= this.currentContract.deadlineWeek) this.finishContract(false);
     if (d.month === 1 && d.week === 1 && d.year > 1) this.yearlyAwards(d.year - 1);
@@ -692,6 +696,8 @@ const G = {
     if (d.year === 31 && d.month === 1 && d.week === 1 && !co.flags.endShown) { co.flags.endShown = true; this.notify('30 años de óptica', `Han pasado treinta años desde aquel puesto del mercado de ${co.startYear}. Es hora de hacer balance (la partida puede seguir hasta 2076).`, 'decision', { sourceId: 'gameend', options: ['Ver la puntuación final'] }); }
     this.randomEvents(w);
     this.checkAchievements();
+    /* autoguardado al final de la semana (después de relevo, fin de partida y eventos) */
+    if (d.week === 1 && co.cash >= -this.overdraftLimit()) this.emit('autosave');
     this.emit('week');
   },
   gabineteIncome() {
@@ -797,10 +803,10 @@ const G = {
   resolveSuccession(choice) {
     const co = this.company; const boss = co.staff[0]; if (!boss) return;
     if (choice === 2) { co.flags.endReason = 'venta'; co.flags.sold = true; this.emit('gameend'); return; }
-    const surname = boss.name.split(' ').slice(1).join(' ') || boss.name;
+    const surname = boss.name.split(' ').slice(1).join(' ') || U.pick(DATA.NAMES.last);
     if (choice === 1) { const h = this.bestHeirEmployee();
-      if (h) { boss.name = h.name; boss.designFactor = h.designFactor; boss.technologyFactor = h.technologyFactor; boss.speedFactor = h.speedFactor; boss.experience = h.experience; boss.sex = h.sex; boss.look = h.look; co.staff = co.staff.filter(s => s !== h); this.notify('Nueva dirección', `${h.name} pasa a dirigir ${co.name}. Conoce la casa como nadie: el equipo sigue igual de motivado.`); }
-      else { boss.name = U.pick(DATA.NAMES.female) + ' ' + U.pick(DATA.NAMES.last); boss.experience = Math.round((boss.experience || 0) * 0.5); this.notify('Nueva dirección', `${boss.name}, gerente de fuera, toma las riendas de ${co.name}.`); }
+      if (h) { this.clearResponsibilities(h, true); boss.name = h.name; boss.designFactor = h.designFactor; boss.technologyFactor = h.technologyFactor; boss.speedFactor = h.speedFactor; boss.experience = h.experience; boss.sex = h.sex; boss.look = h.look; boss.skills = Object.assign({}, boss.skills || {}, h.skills || {}); if (h.currentResearch && !boss.currentResearch) { boss.currentResearch = h.currentResearch; boss.state = h.state; } co.staff = co.staff.filter(s => s !== h); this.notify('Nueva dirección', `${h.name} pasa a dirigir ${co.name}. Conoce la casa como nadie: el equipo sigue igual de motivado.`); }
+      else { boss.name = U.pick(DATA.NAMES.female) + ' ' + U.pick(DATA.NAMES.last); boss.sex = 'female'; boss.experience = Math.round((boss.experience || 0) * 0.5); this.notify('Nueva dirección', `${boss.name}, gerente de fuera, toma las riendas de ${co.name}.`); }
     } else { const sex = U.rnd() < 0.5 ? 'female' : 'male'; boss.name = U.pick(DATA.NAMES[sex]) + ' ' + surname; boss.sex = sex; boss.experience = Math.round((boss.experience || 0) * 0.6); boss.designFactor = U.clamp(boss.designFactor * (0.85 + 0.3 * U.rnd()), 0.3, 1.5); boss.technologyFactor = U.clamp(boss.technologyFactor * (0.85 + 0.3 * U.rnd()), 0.3, 1.5); co.adjustFans(Math.round(co.fans * 0.03)); this.notify('Nueva generación', `${boss.name} coge el relevo en ${co.name}. Los clientes de toda la vida celebran que la óptica siga en la familia (+3 % de clientes fieles).`); }
     this.emit('refresh');
   },
@@ -1227,7 +1233,7 @@ const G = {
     if (co.fans < 150000 && g.score < 8.5) return false;
     const p = U.clamp(0.15 + co.fans / 2e6 + (g.score >= 8 ? 0.1 : 0), 0, 0.6); if (U.rnd() > p) return false;
     g.flags.counterfeit = { rate: Math.round((0.05 + 0.10 * U.rnd()) * 1000) / 1000, decision: null };
-    const where = U.pick(['en los mercadillos de la costa', 'en una web con dominio exótico', 'en bazares de medio país', 'en redes sociales con fotos robadas de nuestro catálogo']);
+    const ryC = co.realYear(); const where = U.pick(['en los mercadillos de la costa', 'en bazares de medio país'].concat(ryC >= 1998 ? ['en una web con dominio exótico'] : ['en tenderetes de las ferias de verano']).concat(ryC >= 2008 ? ['en redes sociales con fotos robadas de nuestro catálogo'] : []));
     this.notify('Falsificaciones', this.withTip(`Han aparecido copias de ${g.title} ${where}: mismas formas, materiales de pena. Podemos denunciarlo (abogados y aduanas: 20.000 €) para frenar el daño, o mirar para otro lado y asumir que venderemos algo menos.`, 'counterfeit'), 'decision', { sourceId: 'counterfeit', gameId: g.id, options: ['Denunciar (20.000 €)', 'Ignorar'] });
     Modules.call('onEvent', co, 'counterfeit', { gameId: g.id, rate: g.flags.counterfeit.rate }); return true;
   },
@@ -1265,7 +1271,7 @@ const G = {
     try { localStorage.setItem(G.SAVE_KEY, JSON.stringify(data)); return true; } catch (e) { console.error(e); return false; }
   },
   load() {
-    try { const raw = localStorage.getItem(G.SAVE_KEY); if (!raw) return false; const d = JSON.parse(raw); this.removeOwnPlatforms(); this.company = Company.load(d.company); this.gameTime = d.gameTime; this.currentFeature = d.currentFeature; this.featureQueue = d.featureQueue || []; this.currentEngineDev = d.currentEngineDev; this.currentContract = d.currentContract; this.contracts = d.contracts; this.hireSearch = d.hireSearch; this.candidates = d.candidates; this.unreadLog = d.unreadLog || []; this.points = []; this.paused = true; this.modalOpen = false; for (const p of this.company.ownPlatforms) this.addOwnPlatform(p, true); Modules.init(this.company); if (this.company.maxStaff < C.LEVELS[this.company.level].maxStaff) this.company.maxStaff = C.LEVELS[this.company.level].maxStaff; this.company.notifications = this.company.notifications.filter(n => n.sourceId !== 'sliders'); if (this.company.currentGame && !this.currentFeature && !this.featureQueue.length && this.company.currentGame.stage < 3) { this.modalOpen = true; this.emit('sliders', this.company.currentGame.stage + 1); } this.emit('newgame'); this.emit('refresh'); return true; } catch (e) { console.error(e); return false; }
+    try { const raw = localStorage.getItem(G.SAVE_KEY); if (!raw) return false; const d = JSON.parse(raw); this.removeOwnPlatforms(); this.company = Company.load(d.company); this.gameTime = d.gameTime; this.currentFeature = d.currentFeature; this.featureQueue = d.featureQueue || []; this.currentEngineDev = d.currentEngineDev; this.currentContract = d.currentContract; this.contracts = d.contracts; this.hireSearch = d.hireSearch; this.candidates = d.candidates; this.unreadLog = d.unreadLog || []; this.points = []; this.paused = true; this.modalOpen = false; for (const p of this.company.ownPlatforms) this.addOwnPlatform(p, true); Modules.init(this.company); if (this.company.maxStaff < C.LEVELS[this.company.level].maxStaff) this.company.maxStaff = C.LEVELS[this.company.level].maxStaff; this.company.notifications = this.company.notifications.filter(n => n.sourceId !== 'sliders'); if (this.company.currentGame && !this.currentFeature && !this.featureQueue.length && this.company.currentGame.stage < 3) { this.modalOpen = true; this.emit('sliders', this.company.currentGame.stage + 1); } this.emit('newgame'); this.emit('refresh'); if (this.company.flags && this.company.flags.sold) setTimeout(() => this.emit('gameend'), 0); return true; } catch (e) { console.error(e); return false; }
   },
   hasSave() { try { return !!localStorage.getItem(G.SAVE_KEY); } catch (e) { return false; } },
   hasBackup() { try { return !!localStorage.getItem(G.SAVE_KEY + '.bak'); } catch (e) { return false; } },
