@@ -344,3 +344,16 @@ body { touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
 .oldrange .srow input[type=range]::-webkit-slider-thumb { width: 20px; height: 46px; }
 @media (max-width: 1000px), (max-height: 800px) { .oldrange .srow input[type=range] { width: 140px; height: 34px; margin: 61px -53px; } }
 @media (pointer: coarse) { .oldrange .srow input[type=range]::-webkit-slider-thumb { width: 30px; height: 46px; } }
+/* asesor «Qué hacer ahora» */
+#advPanel h3 { display: flex; justify-content: space-between; align-items: center; }
+.adv { display: grid; grid-template-columns: 26px 1fr auto; gap: 6px; align-items: center; padding: 6px 0; border-top: 1px solid var(--line); }
+.adv:first-of-type { border-top: 0; }
+.adv .ai { font-size: 19px; text-align: center; }
+.adv b { display: block; font-size: 13px; }
+.adv small { display: block; color: var(--muted); font-size: 12px; line-height: 1.3; }
+.goals { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 14px; }
+.goal { display: grid; grid-template-columns: 24px 1fr; gap: 6px; align-items: start; }
+.goal small { display: block; color: var(--muted); font-size: 12px; }
+.goal.done b { color: var(--muted); text-decoration: line-through; }
+.goal .bar.thin { margin-top: 4px; }
+@media (max-width: 760px) { .goals { grid-template-columns: 1fr; } }
