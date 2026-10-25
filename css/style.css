@@ -388,3 +388,4 @@ body { touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
 .adv.top { background: linear-gradient(#fff6e6, #ffe9c7); border: 1px solid #f0b45a; border-radius: 8px; padding: 8px 6px; margin-bottom: 4px; }
 .adv.top b { font-size: 14px; }
 .adv.top::before { content: 'Siguiente paso'; grid-column: 1 / -1; font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px; color: #b8610a; }
+.sel small.fit.worn { color: #c0392b; }

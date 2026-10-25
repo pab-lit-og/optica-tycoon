@@ -3,7 +3,7 @@
    Las fotos de las monturas van en una caché aparte que se conserva entre versiones (no se vuelven a bajar 5 MB en cada
    publicación) y se descargan una a una: si falla alguna, el resto del modo sin conexión sigue funcionando. */
 'use strict';
-const VERSION = '57e5b27e60'; /* lo cambia publicar.sh en cada publicación */
+const VERSION = 'fd6f16b099'; /* lo cambia publicar.sh en cada publicación */
 const PHOTOS_VERSION = '0f7f17e76b'; /* huella de img/gafas (publicar.sh) */
 const CACHE = 'optica-tycoon-' + VERSION;
 const PHOTOS = 'optica-fotos-' + PHOTOS_VERSION;

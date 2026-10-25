@@ -465,7 +465,7 @@ const Sales = {
     v = v * q / 15 * 0.2 + 0.008; const vv = [v, v, v];
     for (let i = 0; i < plats.length; i++) { vv[i] *= W.platformAudience([plats[i]], g.targetAudience); t[i] += Math.floor(m[i] * vv[i]); }
     if (g.hypePoints) { const c = Math.min(500, g.hypePoints) / 500; if (d >= 5) for (let i = 0; i < plats.length; i++) t[i] += Math.floor((d - 5) / 5 * m[i] * c * 0.05); else for (let i = 0; i < plats.length; i++) t[i] -= Math.floor(d / 5 * vv[i] * 0.25 * c * m[i]); }
-    for (let i = 0; i < plats.length; i++) t[i] = Math.floor(Math.min(t[i], m[i]));
+    for (let i = 0; i < plats.length; i++) t[i] = Math.floor(Math.min(t[i], m[i]) * G.wearFactor(co, plats[i].id)); /* desgaste por canal: repetir canal agota a su clientela */
     if (g.flags.royaltyRate) { t[0] += Math.max(0, Sales.targetFans(g) - k) * f; for (let i = 0; i < plats.length; i++) t[i] *= 10; } else t[0] += k * f;
     const sum = t.reduce((a, b) => a + b, 0); let units = Math.floor(0.8 * sum * f + 0.2 * sum * U.rnd());
     units = Math.floor(units * Modules.product('salesFactor', co, g));
@@ -474,6 +474,7 @@ const Sales = {
     let c = 0; if (d >= 7 && !g.flags.sequelsTooClose) c += 0.05 * k + 0.05 * k * U.rnd();
     if (d >= 5 && !g.flags.sequelsTooClose) { if (g.flags.royaltyRate && Sales.targetFans(g) - k <= 0) c += Math.floor((0.0075 * units * f + 0.0075 * units * U.rnd()) / 10); else c += Math.floor(0.0075 * units * f + 0.0075 * units * U.rnd()); } else c = -co.fans * (1 - f) * 0.25 * U.rnd();
     g.totalSalesCash = units * g.unitPrice * C.UNIT_SCALE * g.marginFactor; g.currentSalesCash = 0; g.salesCashLog = []; g.unitsSold = 0; g.revenue = 0; g.fansChangeTarget = c; g.fansChanged = 0;
+    co.chanWear = co.chanWear || {}; for (const p of plats) co.chanWear[p.id] = (co.chanWear[p.id] || 0) + 1; g.flags.wearAtLaunch = plats.map(p => Math.round((1 - G.wearFactor(co, p.id)) * 100));
     g.initialSalesRank = Sales.initialRank(g); g.topSalesRank = g.initialSalesRank; g.currentSalesRank = g.initialSalesRank; g.soldOut = false;
   },
   initialRank(g) { const c = Math.floor(g.score); let d; if (c === 10) d = 1; else if (c === 9) d = 5; else if (c === 8) d = 10; else if (c === 7) d = 20; else if (c === 6) d = 40; else if (c === 5) d = 60; else return -1; let x = d * U.rnd(); x += 0.5 * d * U.rnd() * U.sign(); const f = Math.floor(d + x); if (f > 100) return -1; return f <= 0 ? 1 : f; },
@@ -682,7 +683,7 @@ const G = {
     this.offerReports(w); this.checkBoosts(w);
     for (const g of co.gameLog) if (g.flags && g.flags.cfWeek && w >= g.flags.cfWeek) { delete g.flags.cfWeek; if (!g.soldOut) this.checkCounterfeit(g); }
     Modules.call('weekly', co, w, d);
-    if (d.week === 1) { const b = General.monthlyCosts(co); co.adjustCash(-b, 'Gastos mensuales'); if (co.currentGame) co.currentGame.costs += b; if (!Modules.get('gabinete')) this.gabineteIncome(); this.subscriptionIncome(); Modules.call('monthly', co, d); if (co.branches) co.adjustCash(this.branchesNet(co), 'Red de sucursales'); }
+    if (d.week === 1) { const b = General.monthlyCosts(co); co.adjustCash(-b, 'Gastos mensuales'); if (co.currentGame) co.currentGame.costs += b; if (!Modules.get('gabinete')) this.gabineteIncome(); this.subscriptionIncome(); Modules.call('monthly', co, d); this.decayWear(co); if (co.branches) co.adjustCash(this.branchesNet(co), 'Red de sucursales'); }
     if (d.month === 1 && d.week === 1 && d.year > 1) { const ry = U.realYear(d.year); const nuevos = DATA.TOPICS.filter(t => t.year === ry); if (nuevos.length) this.log(`🆕 Nuevos estilos en el mercado (${ry}): ${nuevos.map(t => t.name).join(', ')}. Ya se pueden investigar.`); }
     Trends.update(co);
     if (co.startYear !== 1995 && d.week === 1) { if (!co.flags.targetAudienceStory && co.playedAtLeast(2, 6)) { co.flags.targetAudienceStory = true; this.notify('Público objetivo', 'Los estudios de mercado empiezan a segmentar las ventas de gafas por edades. Investigar «Público objetivo» permitiría orientar mejor cada colección.'); } if (!co.flags.marketingStory && co.playedAtLeast(3, 4)) { co.flags.marketingStory = true; this.notify('Publicidad', 'Las revistas de moda lanzan secciones de óptica. Investigar «Marketing» permitiría anunciar las colecciones antes de su lanzamiento.'); } }
@@ -783,6 +784,10 @@ const G = {
     const reasons = []; if (co.cash < def.cash) reasons.push(`caja mínima ${U.money(def.cash)} (tienes ${U.money(co.cash)})`); if (co.staff.length < def.staff) reasons.push(`${def.staff} persona${def.staff > 1 ? 's' : ''} en plantilla`); if (co.gameLog.length < def.games) reasons.push(`${def.games} colecciones lanzadas (llevas ${co.gameLog.length})`); if (!this.isIdle()) reasons.push('ningún proyecto en marcha');
     return Object.assign({ level: l, name: C.LEVELS[l].name, ok: reasons.length === 0, reasons }, def);
   },
+  /* desgaste por canal: cada lanzamiento suma 1 al canal y se recupera un 15 % cada mes; las ventas del canal se dividen entre (1 + 0,12·desgaste), mínimo ×0,7 */
+  wearOf(co, pid) { return (co && co.chanWear && co.chanWear[pid]) || 0; },
+  wearFactor(co, pid) { return Math.max(0.7, 1 / (1 + 0.12 * this.wearOf(co, pid))); },
+  decayWear(co) { if (!co.chanWear) return; for (const k of Object.keys(co.chanWear)) { co.chanWear[k] *= 0.85; if (co.chanWear[k] < 0.05) delete co.chanWear[k]; } },
   /* red de ópticas (sumidero de dinero en la insignia): cada sucursal cuesta más y rinde algo menos que la anterior */
   BRANCH_MAX: 12,
   branchCost(n) { return Math.round(5e6 * Math.pow(1.4, n)); },
