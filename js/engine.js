@@ -71,6 +71,12 @@ const Platforms = {
   /* since = año real desde el que existía el canal: en partidas que empiezan antes de 1995 se adelanta su apertura */
   publishWeek: p => { const w = U.weekFromDate(p.published); if (p.since && U.startYear() < 1995) return Math.min(w, U.weekFromDate(`${p.since - 1994}/1/1`)); return w; },
   retireWeek: p => U.weekFromDate(p.retire),
+  /* semana en que el canal se abre AL JUGADOR. En 1995 coincide con su aparición. Si la partida empieza en otra época, los canales que ya
+     existían no se abren todos de golpe: tienda y mercadillos desde el principio y el resto, del más barato al más caro, uno cada pocos meses
+     (como la progresión de la partida clásica). El tamaño de su mercado sigue la fecha real (publishWeek). */
+  openWeek(p) { const pw = Platforms.publishWeek(p); if (p.isCustom || U.startYear() === 1995) return pw; const s0 = U.absWeek(0); if (pw > s0 || !p.licencePrize) return Math.max(pw, s0);
+    const key = U.startYear(); if (!Platforms._stag || Platforms._stag.key !== key) { const past = key < 1995; const ex = DATA.PLATFORMS.filter(x => !x.isCustom && x.licencePrize && (past || !x.pastOnly) && Platforms.publishWeek(x) <= s0 && Platforms.retireWeek(x) > s0).sort((a, b) => a.licencePrize - b.licencePrize || Platforms.publishWeek(a) - Platforms.publishWeek(b)); const gap = Math.min(16, Math.floor(240 / Math.max(1, ex.length))); const at = {}; ex.forEach((x, i) => { at[x.id] = s0 + 12 + i * gap; }); Platforms._stag = { key, at }; }
+    const a = Platforms._stag.at[p.id]; return a === undefined ? pw : a; },
   marketSizeForWeek(p, week) { return Platforms.rawMarketSize(p, week) * ((G.company && G.company.marketScale) || 1); },
   /* tamaño de mercado sin escalar (week = semana transcurrida de la partida) */
   rawMarketSize(p, week) {
@@ -87,7 +93,10 @@ const Platforms = {
     if (n === 0) return 5e6 * l; if (m > n) m = n;
     return 5e6 * (m / n * (g - l) + l);
   },
-  onMarket(week) { week = U.absWeek(week); const past = U.startYear() < 1995; return DATA.PLATFORMS.filter(p => (past || !p.pastOnly) && Platforms.publishWeek(p) <= week && Platforms.retireWeek(p) > week); },
+  /* canales que existen en el mercado (para escalar el tamaño de la partida) */
+  existing(week) { week = U.absWeek(week); const past = U.startYear() < 1995; return DATA.PLATFORMS.filter(p => (past || !p.pastOnly) && Platforms.publishWeek(p) <= week && Platforms.retireWeek(p) > week); },
+  /* canales abiertos al jugador */
+  onMarket(week) { week = U.absWeek(week); const past = U.startYear() < 1995; const lic = (G.company && G.company.licencedPlatforms) || []; return DATA.PLATFORMS.filter(p => (past || !p.pastOnly) && (Platforms.openWeek(p) <= week || (lic.includes(p.id) && Platforms.publishWeek(p) <= week)) && Platforms.retireWeek(p) > week); },
   totalMarket(week) { return Platforms.onMarket(week).reduce((s, p) => s + Platforms.marketSizeForWeek(p, week), 0); },
   sharePercent(p, week) { const t = Platforms.totalMarket(week); return t ? 100 * Platforms.marketSizeForWeek(p, week) / t : 0; },
 };
@@ -653,10 +662,10 @@ const G = {
     this.company = new Company(companyName, playerName, startYear); this.gameTime = 0; this.currentFeature = null; this.featureQueue = []; this.currentEngineDev = null; this.currentContract = null; this.contracts = null; this.hireSearch = null; this.candidates = null; this.points = []; this.unreadLog = [];
     this.paused = true; this.speed = 1; Modules.init(this.company);
     /* las partidas que empiezan en 2026 arrancan con un mercado del tamaño del de 1995 (si no, serían un paseo); el crecimiento posterior se mantiene */
-    { const co = this.company; const tot = sh => { const save = co.startYear; co.startYear = sh; const t = Platforms.onMarket(0).reduce((s, p) => s + Platforms.rawMarketSize(p, 0), 0); co.startYear = save; return t; };
+    { const co = this.company; const tot = sh => { const save = co.startYear; co.startYear = sh; const t = Platforms.existing(0).reduce((s, p) => s + Platforms.rawMarketSize(p, 0), 0); co.startYear = save; return t; };
       const t95 = tot(1995), t0 = tot(co.startYear);
       /* y que el mercado gratuito del principio (tienda + mercadillos) sea al menos el 40 % del de 1995: sin eso, 1985 y 2026 llevaban a la quiebra */
-      const free = sh => { const save = co.startYear; co.startYear = sh; const t = Platforms.onMarket(0).filter(p => co.licencedPlatforms.includes(p.id)).reduce((s, p) => s + Platforms.rawMarketSize(p, 0), 0); co.startYear = save; return t; };
+      const free = sh => { const save = co.startYear; co.startYear = sh; const t = Platforms.existing(0).filter(p => co.licencedPlatforms.includes(p.id)).reduce((s, p) => s + Platforms.rawMarketSize(p, 0), 0); co.startYear = save; return t; };
       const f95 = free(1995), f0 = free(co.startYear); co.marketScale = Math.max(t0 > t95 ? t95 / t0 : 1, f0 > 0 ? Math.min(3, 0.4 * f95 / f0) : 1); if (co.startYear === 1995) co.marketScale = 1; }
     const sy = this.company.startYear; this.notify('Bienvenido', DATA.NEWS[0].text.replace('Es 1995.', `Es ${sy}.`).replace('70.000 € ahorrados', sy < 1995 ? 'unos ahorros equivalentes a 70.000 € de hoy' : '70.000 € ahorrados').replace(/\(Aviador[^)]*\)/, '(' + this.company.topics.slice(0, 3).map(t => { const tp = DB.topic(t); const okG = [0, 4]; let bi = tp.gw[0] >= tp.gw[4] ? 0 : 4; okG.forEach(i => { if (tp.gw[i] > tp.gw[bi]) bi = i; }); return tp.name + ' → ' + DATA.GENRES[bi].name; }).join(', ') + ')') + (G.ERA_INTRO[sy] ? ' ' + G.ERA_INTRO[sy] : '')); this.company.scheduledShown.push('1/1/1');
     this.emit('newgame'); this.emit('refresh');
@@ -695,7 +704,7 @@ const G = {
     if (co.startYear !== 1995 && d.week === 1) { if (!co.flags.targetAudienceStory && co.playedAtLeast(2, 6)) { co.flags.targetAudienceStory = true; this.notify('Público objetivo', 'Los estudios de mercado empiezan a segmentar las ventas de gafas por edades. Investigar «Público objetivo» permitiría orientar mejor cada colección.'); } if (!co.flags.marketingStory && co.playedAtLeast(3, 4)) { co.flags.marketingStory = true; this.notify('Publicidad', 'Las revistas de moda lanzan secciones de óptica. Investigar «Marketing» permitiría anunciar las colecciones antes de su lanzamiento.'); } }
     if (co.level > 1 && d.month === 5 && d.week === 1 && co.realYear() >= 2001) this.notify('IberÓptica', 'La feria IberÓptica (Madrid) se celebra en junio: ópticas, laboratorios y fabricantes de toda la península. ¿Reservamos un stand?', 'decision', { sourceId: 'booth' });
     else if (d.month === 6 && d.week === 2 && co.conferenceStandFactor) this.runConference();
-    for (const p of DATA.PLATFORMS) { if (Platforms.publishWeek(p) === U.absWeek(w) && w > 0) { this.notify('Noticias del canal', `Hoy se abre un nuevo canal de venta: ${p.name} (${p.company}).` + (p.licencePrize ? ` Licencia: ${U.money(p.licencePrize)}.` : ''), 'news'); if (p.licencePrize === 0 && !co.licencedPlatforms.includes(p.id)) co.licencedPlatforms.push(p.id); } if (Platforms.retireWeek(p) === U.absWeek(w) && w > 0 && (U.startYear() < 1995 || !p.pastOnly) && Platforms.publishWeek(p) < U.absWeek(w)) this.notify('Noticias del canal', `${p.name} cierra sus puertas. Ya no se pueden lanzar colecciones ahí.`, 'news'); }
+    for (const p of DATA.PLATFORMS) { if (Platforms.openWeek(p) === U.absWeek(w) && w > 0) { this.notify('Noticias del canal', Platforms.openWeek(p) > Platforms.publishWeek(p) ? `${p.name} (${p.company}) se fija en tu óptica: ya puedes vender tus colecciones en este canal.` : `Hoy se abre un nuevo canal de venta: ${p.name} (${p.company}).` + (p.licencePrize ? ` Licencia: ${U.money(p.licencePrize)}.` : ''), 'news'); if (p.licencePrize === 0 && !co.licencedPlatforms.includes(p.id)) co.licencedPlatforms.push(p.id); } if (Platforms.retireWeek(p) === U.absWeek(w) && w > 0 && (U.startYear() < 1995 || !p.pastOnly) && Platforms.openWeek(p) < U.absWeek(w)) this.notify('Noticias del canal', `${p.name} cierra sus puertas. Ya no se pueden lanzar colecciones ahí.`, 'news'); }
     for (const n of DATA.NEWS) { if (n.classic && co.startYear !== 1995) continue; if (U.weekFromDate(n.date) === U.absWeek(w) && !co.scheduledShown.includes(n.date)) { co.scheduledShown.push(n.date); if (n.flag) co.flags[n.flag] = true; this.notify(n.title, n.text, 'news'); } }
     if (this.hireSearch && w >= this.hireSearch.targetWeek && !this.candidates) { this.candidates = this.generateApplicants(this.hireSearch); this.notify('Candidatos', `Han llegado ${this.candidates.length} candidaturas para el puesto. Revísalas en el menú de personal.`, 'decision', { sourceId: 'hire' }); }
     if (this.currentContract && this.currentContract.type === 'generic' && w >= this.currentContract.deadlineWeek) this.finishContract(false);
