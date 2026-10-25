@@ -30,7 +30,10 @@ const Advisor = {
   /* alertas de los departamentos (las mismas cifras que enseñan sus paneles) */
   deptAlerts(co) {
     const out = []; const w = Math.floor(co.currentWeek);
-    try { const T = Modules.get('tienda'); if (T && T.api && co.level >= 2) { const s = T.api.state(co); const c = T.api.compute(co, s, w); const att = c.attention || 0; if (c.visits > 20 && att < 0.7) out.push({ dept: 'tienda', p: 62, icon: '🏬', title: `La tienda solo atiende al ${Math.round(att * 100)} %`, why: 'Muchos clientes se van sin comprar. Pon a otra persona en la tienda (ficha → Destino: Tienda) o contrata un asesor de ventas.', go: 'staff' }); } } catch (e) { /* sin tienda */ }
+    try { const T = Modules.get('tienda'); if (T && T.api && co.level >= 2) { const s = T.api.state(co); const c = T.api.compute(co, s, w); const att = c.attention || 0; const team = co.staff.filter(x => !x.assignment).length; const optM = C.SIZE.medium.optimalTeam;
+        if (c.F && !c.F.graduado) out.push({ dept: 'tienda', p: 75, icon: '🏬', title: 'La tienda vende como un puesto', why: 'Sin zona de graduado solo vendes sol y lectura premontada. Móntala en Tienda → Local (10.000 €).', go: 'dept:tienda' });
+        if (c.stockRatio < 0.5) out.push({ dept: 'tienda', p: 72, icon: '🏬', title: 'Expositores medio vacíos', why: `La conversión cae un ${Math.round((1 - (c.stockF || 1)) * 100)} %. Repón stock en Tienda → Local (se recomiendan ${U.money(c.L ? c.L.stock : 0)}).`, go: 'dept:tienda' });
+        if (c.visits > 20 && att < 0.7) out.push({ dept: 'tienda', p: 62, icon: '🏬', title: `La tienda solo atiende al ${Math.round(att * 100)} %`, why: team < optM ? 'Muchos clientes se van sin comprar. Contrata un asesor de ventas para la tienda (no saques a nadie de diseño: ya te falta gente).' : 'Muchos clientes se van sin comprar. Pon a otra persona en la tienda (ficha → Destino: Tienda) o contrata un asesor de ventas.', go: 'staff' }); } } catch (e) { /* sin tienda */ }
     try { const Gb = Modules.get('gabinete'); const s = co.modules && co.modules.gabinete; if (Gb && Gb.api && s && (s.tier || 0) > 0) { const c = Gb.api.compute(co, s, w); if (c.lost >= 1) out.push({ dept: 'gabinete', p: 58, icon: '👁️', title: `Agenda del gabinete llena (${Math.round(c.lost)} se van sin cita)`, why: 'Hace falta más capacidad: otra persona óptica en el gabinete, instrumental más rápido o un box más.', go: 'dept:gabinete' }); } } catch (e) { /* sin gabinete */ }
     for (const id of ['taller', 'lab']) { const st = co.modules && co.modules[id]; if (st && (st.tier || 0) >= 2 && !co.staff.some(x => x.assignment === id)) out.push({ dept: id, p: 46, icon: id === 'taller' ? '🛠️' : '🧪', title: `${id === 'taller' ? 'El taller' : 'El laboratorio'} no tiene a nadie`, why: 'Está montado pero sin personal asignado rinde al mínimo. Asigna a alguien desde su ficha.', go: 'staff' }); }
     return out;
@@ -54,7 +57,7 @@ const Advisor = {
     const tired = co.staff.filter(s => s.flags && s.flags.needsVacation && s.state !== 'vacation');
     if (tired.length) add(90, '😴', `${tired.length === 1 ? tired[0].name.split(' ')[0] + ' necesita' : tired.length + ' personas necesitan'} vacaciones`, 'Cansados rinden mucho menos y meten más defectos. Mándalos de vacaciones entre colecciones.', 'staff');
     // 3. sin proyecto
-    if (idle && !co.currentGame && !G.currentEngineDev) {
+    if (idle && !co.currentGame && !G.currentEngineDev && co.staff.some(s => s.isAvailable && s.isAvailable())) {
       const team = co.staff.filter(s => !s.assignment).length; const sizes = co.availableSizes(); let best = sizes.filter(sz => C.SIZE[sz].optimalTeam <= Math.max(1, team)).pop() || 'small'; if (co.level >= 2 && best === 'small' && sizes.includes('medium')) best = 'medium';
       add(85, '👓', 'Empieza una colección', `No hay nada en marcha. Con ${team} persona${team === 1 ? '' : 's'} en diseño, el tamaño que mejor rinde es ${C.SIZE[best].label.toLowerCase()}.`, 'newgame');
     }
@@ -75,8 +78,8 @@ const Advisor = {
       const rank = it => { const i = this.RESEARCH_ORDER.indexOf(it.id); return i < 0 ? 50 + (it.v || 0) : i; };
       avail.sort((a, b) => rank(a) - rank(b));
       const can = avail.filter(it => co.researchPoints >= Research.pointsCost(it) && co.cash - Research.researchCost(it) > fixed);
-      const top = can[0] || null;
-      if (top) add(70 - Math.min(20, rank(top)), '🔬', `Investiga «${top.name}»`, (this.WHY[top.id] || (top.desc ? top.desc.replace(/\s*\(desde \d+\)$/, '').replace(/\.$/, '').toLowerCase() : top.category ? 'mejora de ' + top.category.toLowerCase() + ' para tus líneas de producción' : 'te abre nuevas opciones')) + `. Cuesta ${Research.pointsCost(top)} puntos${Research.researchCost(top) ? ' y ' + U.money(Research.researchCost(top)) : ''}.`, 'research');
+      const bid = this.bestResearch(co); const top = can.find(it => it.id === bid) || can[0] || null;
+      if (top) add(70 - Math.min(20, rank(top)), '🔬', top.id === 'NewTopic' ? (() => { const t = co.topicOrder.find(x => !co.topics.includes(x) && (DB.topic(x).year || 0) <= co.realYear()); return t ? `Investiga el estilo «${DB.topic(t).name}»` : 'Investiga un estilo nuevo'; })() : `Investiga «${top.name}»`, (this.WHY[top.id] || (top.desc ? top.desc.replace(/\s*\(desde \d+\)$/, '').replace(/\.$/, '').toLowerCase() : top.category ? 'mejora de ' + top.category.toLowerCase() + ' para tus líneas de producción' : 'te abre nuevas opciones')) + `. Cuesta ${Research.pointsCost(top)} puntos${Research.researchCost(top) ? ' y ' + U.money(Research.researchCost(top)) : ''}.`, 'research');
       else if (avail.length) { const n = avail[0]; add(30, '🔬', `Siguiente investigación: «${n.name}»`, `Te faltan ${Math.max(0, Research.pointsCost(n) - Math.floor(co.researchPoints))} puntos de investigación (salen al desarrollar colecciones).`, 'research'); }
     }
     // 6. línea de producción anticuada
@@ -98,9 +101,9 @@ const Advisor = {
       }
     }
     // 8a. dinero de sobra en la insignia: red de sucursales
-    if (co.level >= 4 && (co.branches || 0) < G.BRANCH_MAX && co.cash > G.branchCost(co.branches || 0) * 2.5) add(40, '🏪', 'Abre una sucursal', `Te sobra caja: una sucursal cuesta ${U.money(G.branchCost(co.branches || 0))} y da ${U.money(G.branchIncome(co, co.branches || 0))}/mes y más clientes fieles.`, 'local');
+    { const nb = co.branches || 0; const net = nb < G.BRANCH_MAX ? G.branchIncome(co, nb) - G.branchUpkeep : 0; if (co.level >= 4 && net > 0 && co.cash > G.branchCost(nb) * 2.5 && G.branchCost(nb) / net < 120) add(40, '🏪', 'Abre una sucursal', `Te sobra caja: una sucursal cuesta ${U.money(G.branchCost(nb))} y deja ${U.money(net)}/mes netos y más clientes fieles.`, 'local'); }
     // 8b. alertas de departamentos
-    for (const a of this.deptAlerts(co)) if (!out.some(o => o.title === a.title)) add(a.p, a.icon, a.title, a.why, a.go);
+    for (const a of this.deptAlerts(co).filter((a, i, arr) => arr.findIndex(b => b.dept === a.dept) === i)) { const nm = this.DEPT_NAMES[a.dept] || ''; if (!out.some(o => o.title === a.title || (nm && o.title.toLowerCase().includes(nm.replace(/^(el|la) /, ''))))) add(a.p, a.icon, a.title, a.why, a.go); }
     // 9. objetivos cercanos
     if (nl && !nl.ok) add(25, '🎯', `Para pasar a ${nl.name}`, 'Te falta: ' + nl.reasons.join(', ') + '.', 'local');
     if (g && G.currentFeature && G.currentFeature.id === 'BugFixing' && G.currentFeature.progress >= 1 && (g.bugs || 0) > 0) add(40, '🧪', 'Colección lista para lanzar', `Quedan ${Math.round(g.bugs)} defectos: el equipo sigue corrigiendo. Espera a 0 para mejor nota o pulsa «Lanzar ya».`, null);
@@ -114,10 +117,10 @@ const Advisor = {
     const nl = G.nextLevelInfo && G.nextLevelInfo();
     if (nl) add(false, `Pasa a ${nl.name}`, nl.ok ? '¡Listo! Menú ☰ → Local y mudanza.' : 'Falta: ' + nl.reasons.join(', '), Math.min(1, co.cash / Math.max(1, nl.cash)));
     else add(true, 'Óptica insignia', 'Has llegado al local más grande.');
-    add(this.has(co, 'MediumSizeGames'), 'Investiga colecciones medianas', 'Más puntos y ventas por colección.');
+    add(this.has(co, 'MediumSizeGames'), 'Investiga colecciones medianas', 'Más puntos y ventas por colección. Desde el local comercial.');
     add(co.fans >= 20000, '20.000 clientes fieles', 'Las medianas dejan de tener el −10 % de «nivel técnico».', co.fans / 20000);
     add(this.has(co, 'LargeSizeGames'), 'Colecciones grandes', 'Requiere 25.000 clientes fieles y 5 personas.', Math.min(co.fans / 25000, co.staff.length / 5));
-    add(co.staff.length >= co.maxStaff, `Plantilla completa (${co.staff.length}/${co.maxStaff})`, 'Cada local admite más gente que el anterior.', co.staff.length / Math.max(1, co.maxStaff));
+    if (co.level >= 2) add(co.staff.length >= co.maxStaff, `Plantilla completa (${co.staff.length}/${co.maxStaff})`, 'Cada local admite más gente que el anterior.', co.staff.length / Math.max(1, co.maxStaff));
     const best = co.gameLog.reduce((m, x) => Math.max(m, x.score || 0), 0);
     add(best >= 9, 'Saca un 9 o más', best ? `Tu mejor nota: ${best.toFixed(1)}.` : 'Aún sin colecciones.', best / 9);
     const deps = ['gabinete', 'taller', 'lab'].filter(id => co.modules && co.modules[id] && (co.modules[id].tier || 0) > 0).length;

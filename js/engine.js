@@ -580,14 +580,16 @@ class Company {
   realYear() { return this.getCurrentDate().year + this.startYear - 1; }
   playedAtLeast(y, m) { return Math.floor(this.currentWeek) >= U.weekFromDate(`${y}/${m || 1}/1`); } /* tiempo jugado (hitos de progresión, como en GDT) */
   adjustCash(v, label) { if (!isFinite(v)) { console.error('adjustCash: valor no numérico', label, v); return; } this.cash += v; if (label) this.cashLog.push({ week: Math.floor(this.currentWeek), amount: v, label }); if (this.cashLog.length > 400) this.cashLog.shift(); if (v > 0) this.stats.totalRevenue += v; G.emit('cash', v); }
-  adjustFans(v) { if (!isFinite(v)) { console.error('adjustFans: valor no numérico', v); return; } if (v > 0 && this.fans > 1e6) v *= Math.max(0, 1 - (this.fans - 1e6) / 2.9e7); /* saturación a partir del millón: el mercado no es infinito */ this.fans = Math.max(0, Math.round(this.fans + v)); if (!isFinite(this.fans)) this.fans = 0; }
+  adjustFans(v) { if (!isFinite(v)) { console.error('adjustFans: valor no numérico', v); return; } if (v > 0 && this.fans > 2e6) v *= 2e6 / this.fans; /* saturación desde 2 M: crecer cuesta cada vez más, pero nunca se para */ this.fans = Math.max(0, Math.round(this.fans + v)); if (!isFinite(this.fans)) this.fans = 0; }
   hasResearch(id) { return this.researchCompleted.includes(id); }
   canDevelopEngine() { return this.hasResearch('CustomEngine'); }
   canSetTargetAudience() { return this.hasResearch('TargetAudience'); }
   availableGenres() { return DATA.GENRES.filter(g => !g.research || this.hasResearch(g.research)); }
   availableSizes() { const s = ['small']; if (this.hasResearch('MediumSizeGames')) s.push('medium'); if (this.hasResearch('LargeSizeGames')) s.push('large'); if (this.hasResearch('AAA')) s.push('aaa'); return s; }
   save() {
-    const o = Object.assign({}, this); o.staff = this.staff.map(s => s.save()); return o;
+    const o = Object.assign({}, this); o.staff = this.staff.map(s => s.save());
+    /* las colecciones antiguas (salvo las 10 últimas) se guardan sin el detalle de trabajo, que es el 80 % del peso; el desglose de la nota se conserva */
+    const n = this.gameLog.length; o.gameLog = this.gameLog.map((g, i) => { if (i >= n - 10 || !g.flags) return g; const f = Object.assign({}, g.flags); delete f.xpLog; delete f.reportData; delete f.taller; delete f.staffContribution; delete f.featureResponsibility; return Object.assign({}, g, { flags: f, featureLog: undefined }); }); return o;
   }
   static load(o) { const c = new Company(o.name, 'x'); Object.assign(c, o); c.staff = o.staff.map(s => new Character(s)); return c.repair(); }
 }
@@ -639,7 +641,7 @@ const G = {
   /* ---------- inicio ---------- */
   newGame(companyName, playerName, startYear) {
     /* la partida anterior no se pierde: queda como copia («Recuperar partida anterior») */
-    if (this.company && this.company.cash >= -this.overdraftLimit() && !this.company.flags.sold) this.save(); try { const p = localStorage.getItem(G.SAVE_KEY); if (p) localStorage.setItem(G.SAVE_KEY + '.bak', p); } catch (e) { /* sin almacenamiento */ }
+    if (this.company && this.company.cash >= -this.overdraftLimit() && !this.company.flags.sold) this.save(); try { const p = localStorage.getItem(G.SAVE_KEY); if (p && p.length < 1.2e6) localStorage.setItem(G.SAVE_KEY + '.bak', p); else localStorage.removeItem(G.SAVE_KEY + '.bak'); } catch (e) { /* sin espacio para la copia: no pasa nada */ }
     this.removeOwnPlatforms();
     this.company = new Company(companyName, playerName, startYear); this.gameTime = 0; this.currentFeature = null; this.featureQueue = []; this.currentEngineDev = null; this.currentContract = null; this.contracts = null; this.hireSearch = null; this.candidates = null; this.points = []; this.unreadLog = [];
     this.paused = true; this.speed = 1; Modules.init(this.company);
@@ -649,7 +651,7 @@ const G = {
       /* y que el mercado gratuito del principio (tienda + mercadillos) sea al menos el 40 % del de 1995: sin eso, 1985 y 2026 llevaban a la quiebra */
       const free = sh => { const save = co.startYear; co.startYear = sh; const t = Platforms.onMarket(0).filter(p => co.licencedPlatforms.includes(p.id)).reduce((s, p) => s + Platforms.rawMarketSize(p, 0), 0); co.startYear = save; return t; };
       const f95 = free(1995), f0 = free(co.startYear); co.marketScale = Math.max(t0 > t95 ? t95 / t0 : 1, f0 > 0 ? Math.min(3, 0.4 * f95 / f0) : 1); if (co.startYear === 1995) co.marketScale = 1; }
-    const sy = this.company.startYear; this.notify('Bienvenido', DATA.NEWS[0].text.replace('Es 1995.', `Es ${sy}.`).replace('70.000 € ahorrados', sy < 2002 ? 'unos ahorros equivalentes a 70.000 € de hoy' : '70.000 € ahorrados').replace(/\(Aviador[^)]*\)/, '(' + this.company.topics.slice(0, 3).map(t => { const tp = DB.topic(t); let bi = 0; tp.gw.slice(0, 6).forEach((v, i) => { if (v > tp.gw[bi]) bi = i; }); return tp.name + ' → ' + DATA.GENRES[bi].name; }).join(', ') + ')') + (G.ERA_INTRO[sy] ? ' ' + G.ERA_INTRO[sy] : '')); this.company.scheduledShown.push('1/1/1');
+    const sy = this.company.startYear; this.notify('Bienvenido', DATA.NEWS[0].text.replace('Es 1995.', `Es ${sy}.`).replace('70.000 € ahorrados', sy < 1995 ? 'unos ahorros equivalentes a 70.000 € de hoy' : '70.000 € ahorrados').replace(/\(Aviador[^)]*\)/, '(' + this.company.topics.slice(0, 3).map(t => { const tp = DB.topic(t); const okG = [0, 4]; let bi = tp.gw[0] >= tp.gw[4] ? 0 : 4; okG.forEach(i => { if (tp.gw[i] > tp.gw[bi]) bi = i; }); return tp.name + ' → ' + DATA.GENRES[bi].name; }).join(', ') + ')') + (G.ERA_INTRO[sy] ? ' ' + G.ERA_INTRO[sy] : '')); this.company.scheduledShown.push('1/1/1');
     this.emit('newgame'); this.emit('refresh');
   },
 
@@ -691,13 +693,13 @@ const G = {
     if (this.hireSearch && w >= this.hireSearch.targetWeek && !this.candidates) { this.candidates = this.generateApplicants(this.hireSearch); this.notify('Candidatos', `Han llegado ${this.candidates.length} candidaturas para el puesto. Revísalas en el menú de personal.`, 'decision', { sourceId: 'hire' }); }
     if (this.currentContract && this.currentContract.type === 'generic' && w >= this.currentContract.deadlineWeek) this.finishContract(false);
     if (d.month === 1 && d.week === 1 && d.year > 1) this.yearlyAwards(d.year - 1);
-    if (d.month === 1 && d.week === 1 && (d.year === 36 || d.year === 71) && !co.flags['relevo' + d.year]) { co.flags['relevo' + d.year] = true; const best = this.bestHeirEmployee(); this.notify('Relevo generacional', `Han pasado ${d.year - 1} años desde que ${co.staff[0] ? co.staff[0].name : 'el fundador'} abrió el puesto. Toca decidir quién lleva la óptica a partir de ahora.`, 'decision', { sourceId: 'relevo', options: ['Lo coge mi hija o mi hijo', best ? `Se la dejo a ${best.name}` : 'Busco un gerente de fuera', 'Vender la óptica y retirarme'] }); }
+    if (d.month === 1 && d.week === 1 && (d.year === 36 || d.year === 71 || d.year === 106) && !co.flags['relevo' + d.year]) { co.flags['relevo' + d.year] = true; const best = this.bestHeirEmployee(); this.notify('Relevo generacional', `Han pasado ${d.year - 1} años desde que ${co.staff[0] ? co.staff[0].name : 'el fundador'} abrió el puesto. Toca decidir quién lleva la óptica a partir de ahora.`, 'decision', { sourceId: 'relevo', options: ['Lo coge mi hija o mi hijo', best ? `Se la dejo a ${best.name}` : 'Busco un gerente de fuera', 'Vender la óptica y retirarme'] }); }
     if (d.month === 1 && d.week === 1 && co.realYear() >= this.END_YEAR && !co.flags.end2076) { co.flags.end2076 = true; co.flags.endReason = 'fin'; this.notify(`Fin de la partida: ${this.END_YEAR}`, `Hemos llegado a ${this.END_YEAR}. Hora de hacer balance de toda la historia de ${co.name}.`, 'decision', { sourceId: 'gameend', options: ['Ver la puntuación final'] }); }
     if (d.year === 31 && d.month === 1 && d.week === 1 && !co.flags.endShown) { co.flags.endShown = true; this.notify('30 años de óptica', `Han pasado treinta años desde aquel puesto del mercado de ${co.startYear}. Es hora de hacer balance (la partida puede seguir hasta 2076).`, 'decision', { sourceId: 'gameend', options: ['Ver la puntuación final'] }); }
     this.randomEvents(w);
     this.checkAchievements();
     /* autoguardado al final de la semana (después de relevo, fin de partida y eventos) */
-    if (d.week === 1 && co.cash >= -this.overdraftLimit()) this.emit('autosave');
+    if (d.week === 1 && (this.speed < 2 || d.month % 3 === 1) && co.cash >= -this.overdraftLimit()) this.emit('autosave');
     this.emit('week');
   },
   gabineteIncome() {
@@ -783,11 +785,11 @@ const G = {
   },
   /* red de ópticas (sumidero de dinero en la insignia): cada sucursal cuesta más y rinde algo menos que la anterior */
   BRANCH_MAX: 12,
-  branchCost(n) { return Math.round(5e6 * Math.pow(1.6, n)); },
-  branchIncome(co, i) { return Math.round(Math.min(600000, 150000 + (co.fans || 0) * 0.05) * Math.pow(0.85, i)); },
+  branchCost(n) { return Math.round(5e6 * Math.pow(1.4, n)); },
+  branchIncome(co, i) { return Math.round(Math.min(500000, 150000 + (co.fans || 0) * 0.05) * Math.pow(0.92, i)); },
   branchUpkeep: 60000,
   branchesNet(co) { let n = 0; for (let i = 0; i < (co.branches || 0); i++) n += this.branchIncome(co, i) - this.branchUpkeep; return n; },
-  openBranch() { const co = this.company; const n = co.branches || 0; if (co.level < 4 || n >= this.BRANCH_MAX) return false; const c = this.branchCost(n); if (!this.canSpend(c)) return false; co.adjustCash(-c, 'Nueva sucursal'); co.branches = n + 1; co.adjustFans(Math.round(co.fans * 0.03) + 2000); this.log(`🏪 Abrimos la sucursal n.º ${co.branches} de ${co.name}.`); this.emit('refresh'); return true; },
+  openBranch() { const co = this.company; const n = co.branches || 0; if (co.level < 4 || n >= this.BRANCH_MAX) return false; const c = this.branchCost(n); if (!this.canSpend(c)) return false; co.adjustCash(-c, 'Nueva sucursal'); co.stats.branchSpend = (co.stats.branchSpend || 0) + c; co.branches = n + 1; co.adjustFans(Math.round(co.fans * 0.03) + 2000); this.log(`🏪 Abrimos la sucursal n.º ${co.branches} de ${co.name}.`); this.emit('refresh'); return true; },
   moveToLevel(l) {
     const co = this.company; const cost = l === 4 ? 4e6 : 150000; co.adjustCash(-cost, 'Nuevo local'); co.level = l; co.maxStaff = C.LEVELS[l].maxStaff;
     const txt = { 2: 'Nos hemos mudado al local comercial. Ya podemos contratar hasta 4 empleados (menú Personal) e investigar colecciones medianas.', 3: 'Reforma terminada: ahora tenemos gabinete optométrico (investígalo para empezar a recibir pacientes), sala de formación y un taller mejor equipado. Hay nuevos cursos disponibles.', 4: 'Bienvenidos a la óptica insignia. Hasta 6 empleados, laboratorio de I+D y mucho más espacio.' }[l];
@@ -812,7 +814,7 @@ const G = {
     if (choice === 2) { co.flags.endReason = 'venta'; co.flags.sold = true; this.emit('gameend'); return; }
     const surname = boss.name.split(' ').slice(1).join(' ') || U.pick(DATA.NAMES.last);
     if (choice === 1) { const h = this.bestHeirEmployee();
-      if (h) { this.clearResponsibilities(h, true); boss.name = h.name; boss.designFactor = h.designFactor; boss.technologyFactor = h.technologyFactor; boss.speedFactor = h.speedFactor; boss.experience = h.experience; boss.sex = h.sex; boss.look = h.look; boss.skills = Object.assign({}, boss.skills || {}, h.skills || {}); if (h.currentResearch && !boss.currentResearch) { boss.currentResearch = h.currentResearch; boss.state = h.state; } co.staff = co.staff.filter(s => s !== h); this.notify('Nueva dirección', `${h.name} pasa a dirigir ${co.name}. Conoce la casa como nadie: el equipo sigue igual de motivado.`); }
+      if (h) { this.clearResponsibilities(h, true); boss.name = h.name; boss.designFactor = h.designFactor; boss.technologyFactor = h.technologyFactor; boss.speedFactor = h.speedFactor; boss.experience = h.experience; boss.sex = h.sex; boss.look = h.look; boss.skills = Object.assign({}, boss.skills || {}, h.skills || {}); if (h.currentResearch) { if (!boss.currentResearch && boss.state === 'idle') { boss.currentResearch = h.currentResearch; boss.state = h.state; } else { const it = DB.item(h.currentResearch.id); if (it) { co.researchPoints += Research.pointsCost(it); const c = Research.researchCost(it); if (c) co.adjustCash(c, 'Investigación interrumpida (devolución)'); } } } co.staff = co.staff.filter(s => s !== h); this.notify('Nueva dirección', `${h.name} pasa a dirigir ${co.name}. Conoce la casa como nadie: el equipo sigue igual de motivado.`); }
       else { boss.name = U.pick(DATA.NAMES.female) + ' ' + U.pick(DATA.NAMES.last); boss.sex = 'female'; boss.experience = Math.round((boss.experience || 0) * 0.5); this.notify('Nueva dirección', `${boss.name}, gerente de fuera, toma las riendas de ${co.name}.`); }
     } else { const sex = U.rnd() < 0.5 ? 'female' : 'male'; boss.name = U.pick(DATA.NAMES[sex]) + ' ' + surname; boss.sex = sex; boss.experience = Math.round((boss.experience || 0) * 0.6); boss.designFactor = U.clamp(boss.designFactor * (0.85 + 0.3 * U.rnd()), 0.3, 1.5); boss.technologyFactor = U.clamp(boss.technologyFactor * (0.85 + 0.3 * U.rnd()), 0.3, 1.5); co.adjustFans(Math.round(co.fans * 0.03)); this.notify('Nueva generación', `${boss.name} coge el relevo en ${co.name}. Los clientes de toda la vida celebran que la óptica siga en la familia (+3 % de clientes fieles).`); }
     this.emit('refresh');
@@ -1085,7 +1087,7 @@ const G = {
   /* ---------- tutorial paso a paso (una sola vez por clave; se guarda en co.tutorialShown) ---------- */
   TUTORIAL: {
     firstGame: { header: 'Manos a la obra', text: 'Tu primera colección está en marcha. Durante la preparación verás salir burbujas: las naranjas (D) son puntos de diseño, las azules (T) de técnica, las verdes (I) de investigación y las rojas (✕) defectos que corregiremos al final.\nCuando termine la preparación te pediré repartir el tiempo de cada fase.' },
-    firstSliders: { header: 'Reparte el tiempo', text: 'Cada fase tiene tres campos. Sube los que importen para el tipo de gafa (una de Sol vive de Forma, Concepto, Acabados y Escaparate; una Deportiva, de Estructura, Ergonomía, Lentes y Materiales) y no bajes ninguno del 20 %: si dudas, el reparto por igual funciona. Lo que más pesa en la nota es que el tipo pegue con el estilo. Los informes irán marcando cada campo (☆ importante · = normal · ✕ poco útil · ? sin datos).' },
+    firstSliders: { header: 'Reparte el tiempo', text: 'Cada fase tiene tres campos. Sube los que importen para el tipo de gafa (una de Sol vive de Forma, Concepto, Acabados y Escaparate; una Deportiva, de Estructura, Ergonomía, Lentes y Materiales) y no bajes ninguno del 20 %: un campo cuenta como «bien» cuando recibe al menos el 40 % de su fase: pon ese 40 % en el campo clave del tipo. Lo que más pesa en la nota es que el tipo pegue con el estilo. Los informes irán marcando cada campo (☆ importante · = normal · ✕ poco útil · ? sin datos).' },
     responsibility: { header: 'Responsables por campo', text: 'Con más de una persona en el equipo puedes decidir quién lidera cada campo. Elige a quien tenga la habilidad adecuada (Diseño para Forma o Acabados, Técnica para Estructura o Lentes) y vigila su carga de trabajo: por encima del 100 % rinde peor y salen más defectos. Tras 5 colecciones al frente del mismo campo se convierte en especialista.' },
     firstSale: { header: 'Primeras ventas', text: 'Las ventas llegan semana a semana durante unas {weeks} semanas y las verás en el panel de Ventas. Cuanto mejor sea la nota, más clientes fieles tengas y más expectación hayas creado, más se vende. Unas semanas después del lanzamiento te ofreceré su informe: ahí verás qué falló y qué acertaste.' },
     firstResearch: { header: 'Investigando', text: 'Mientras {name} investiga no trabaja en colecciones. Los puntos de investigación (burbujas verdes) se generan trabajando: gástalos en estilos nuevos, en el taller propio y, más adelante, en tecnologías para tus líneas de producción.' },
@@ -1275,7 +1277,7 @@ const G = {
   save() {
     if (!this.company) return; const data = { v: 2, gameTime: this.gameTime, company: this.company.save(), currentFeature: this.currentFeature, featureQueue: this.featureQueue, currentEngineDev: this.currentEngineDev, currentContract: this.currentContract, contracts: this.contracts, hireSearch: this.hireSearch, candidates: this.candidates, unreadLog: this.unreadLog, savedAt: Date.now() };
     if (this.shownNotification && this.modalOpen) data.company.notifications = [this.shownNotification].concat(this.company.notifications);
-    try { localStorage.setItem(G.SAVE_KEY, JSON.stringify(data)); return true; } catch (e) { console.error(e); return false; }
+    const txt = JSON.stringify(data); try { localStorage.setItem(G.SAVE_KEY, txt); return true; } catch (e) { try { localStorage.removeItem(G.SAVE_KEY + '.bak'); localStorage.setItem(G.SAVE_KEY, txt); return true; } catch (e2) { console.error(e2); this.saveFailed = true; return false; } }
   },
   load() {
     try { const raw = localStorage.getItem(G.SAVE_KEY); if (!raw) return false; const d = JSON.parse(raw); this.removeOwnPlatforms(); this.company = Company.load(d.company); this.gameTime = d.gameTime; this.currentFeature = d.currentFeature; this.featureQueue = d.featureQueue || []; this.currentEngineDev = d.currentEngineDev; this.currentContract = d.currentContract; this.contracts = d.contracts; this.hireSearch = d.hireSearch; this.candidates = d.candidates; this.unreadLog = d.unreadLog || []; this.points = []; this.paused = true; this.modalOpen = false; for (const p of this.company.ownPlatforms) this.addOwnPlatform(p, true); Modules.init(this.company); if (this.company.maxStaff < C.LEVELS[this.company.level].maxStaff) this.company.maxStaff = C.LEVELS[this.company.level].maxStaff; this.company.notifications = this.company.notifications.filter(n => n.sourceId !== 'sliders'); if (this.company.currentGame && !this.currentFeature && !this.featureQueue.length && this.company.currentGame.stage < 3) { this.modalOpen = true; this.emit('sliders', this.company.currentGame.stage + 1); } this.emit('newgame'); this.emit('refresh'); if (this.company.flags && this.company.flags.sold) setTimeout(() => this.emit('gameend'), 0); return true; } catch (e) { console.error(e); return false; }

@@ -1,8 +1,12 @@
 /* Óptica Tycoon — modo sin conexión. Guarda una copia del juego en el dispositivo la primera vez que se abre con internet.
-   La página se pide primero a la red (para recibir las actualizaciones) y, sin conexión, se sirve la copia guardada. */
+   La página se pide primero a la red (para recibir las actualizaciones) y, sin conexión, se sirve la copia guardada.
+   Las fotos de las monturas van en una caché aparte que se conserva entre versiones (no se vuelven a bajar 5 MB en cada
+   publicación) y se descargan una a una: si falla alguna, el resto del modo sin conexión sigue funcionando. */
 'use strict';
-const VERSION = '4c4f762e73'; /* lo cambia publicar.sh en cada publicación */
+const VERSION = '57e5b27e60'; /* lo cambia publicar.sh en cada publicación */
+const PHOTOS_VERSION = '0f7f17e76b'; /* huella de img/gafas (publicar.sh) */
 const CACHE = 'optica-tycoon-' + VERSION;
+const PHOTOS = 'optica-fotos-' + PHOTOS_VERSION;
 const EXTRA = './img/gafas/abuelita-g.webp,./img/gafas/abuelita-s.webp,./img/gafas/acero-g.webp,./img/gafas/acero-s.webp,./img/gafas/alaire-g.webp,./img/gafas/alaire-s.webp,./img/gafas/arquitecto-g.webp,./img/gafas/arquitecto-s.webp,./img/gafas/audiogafa-g.webp,./img/gafas/audiogafa-s.webp,./img/gafas/autofoco-g.webp,./img/gafas/autofoco-s.webp,./img/gafas/autorreparable-g.webp,./img/gafas/autorreparable-s.webp,./img/gafas/aviadegr-g.webp,./img/gafas/aviadegr-s.webp,./img/gafas/aviador-g.webp,./img/gafas/aviador-s.webp,./img/gafas/bicolor-g.webp,./img/gafas/bicolor-s.webp,./img/gafas/bifocal-g.webp,./img/gafas/bifocal-s.webp,./img/gafas/carbono-g.webp,./img/gafas/carbono-s.webp,./img/gafas/carey-g.webp,./img/gafas/carey-s.webp,./img/gafas/carreras-g.webp,./img/gafas/carreras-s.webp,./img/gafas/cateye-g.webp,./img/gafas/cateye-s.webp,./img/gafas/cazal-g.webp,./img/gafas/cazal-s.webp,./img/gafas/chunky-g.webp,./img/gafas/chunky-s.webp,./img/gafas/climatica-g.webp,./img/gafas/climatica-s.webp,./img/gafas/clubmaster-g.webp,./img/gafas/clubmaster-s.webp,./img/gafas/combinada-g.webp,./img/gafas/combinada-s.webp,./img/gafas/crownpanto-g.webp,./img/gafas/crownpanto-s.webp,./img/gafas/culovaso-g.webp,./img/gafas/culovaso-s.webp,./img/gafas/doblepuente-g.webp,./img/gafas/doblepuente-s.webp,./img/gafas/eco-g.webp,./img/gafas/eco-s.webp,./img/gafas/electrocromica-g.webp,./img/gafas/electrocromica-s.webp,./img/gafas/envolventes-g.webp,./img/gafas/envolventes-s.webp,./img/gafas/escudo-g.webp,./img/gafas/escudo-s.webp,./img/gafas/esqui-g.webp,./img/gafas/esqui-s.webp,./img/gafas/flexible-g.webp,./img/gafas/flexible-s.webp,./img/gafas/flexkids-g.webp,./img/gafas/flexkids-s.webp,./img/gafas/gafaar-g.webp,./img/gafas/gafaar-s.webp,./img/gafas/glaciar-g.webp,./img/gafas/glaciar-s.webp,./img/gafas/glam-g.webp,./img/gafas/glam-s.webp,./img/gafas/grafeno-g.webp,./img/gafas/grafeno-s.webp,./img/gafas/hexagonales-g.webp,./img/gafas/hexagonales-s.webp,./img/gafas/hipster-g.webp,./img/gafas/hipster-s.webp,./img/gafas/impresa3d-g.webp,./img/gafas/impresa3d-s.webp,./img/gafas/joya-g.webp,./img/gafas/joya-s.webp,./img/gafas/keyhole-g.webp,./img/gafas/keyhole-s.webp,./img/gafas/lentillaint-g.webp,./img/gafas/lentillaint-s.webp,./img/gafas/logomania-g.webp,./img/gafas/logomania-s.webp,./img/gafas/lujosilencioso-g.webp,./img/gafas/lujosilencioso-s.webp,./img/gafas/madera-g.webp,./img/gafas/madera-s.webp,./img/gafas/mariposa-g.webp,./img/gafas/mariposa-s.webp,./img/gafas/medialuna-g.webp,./img/gafas/medialuna-s.webp,./img/gafas/micelio-g.webp,./img/gafas/micelio-s.webp,./img/gafas/microoval-g.webp,./img/gafas/microoval-s.webp,./img/gafas/minimal-g.webp,./img/gafas/minimal-s.webp,./img/gafas/mioexterior-g.webp,./img/gafas/mioexterior-s.webp,./img/gafas/modular2-g.webp,./img/gafas/modular2-s.webp,./img/gafas/movida-g.webp,./img/gafas/movida-s.webp,./img/gafas/navegador-g.webp,./img/gafas/navegador-s.webp,./img/gafas/neoanalogica-g.webp,./img/gafas/neoanalogica-s.webp,./img/gafas/neon-g.webp,./img/gafas/neon-s.webp,./img/gafas/neural-g.webp,./img/gafas/neural-s.webp,./img/gafas/nordico-g.webp,./img/gafas/nordico-s.webp,./img/gafas/noventas-g.webp,./img/gafas/noventas-s.webp,./img/gafas/nylor-g.webp,./img/gafas/nylor-s.webp,./img/gafas/optyl-g.webp,./img/gafas/optyl-s.webp,./img/gafas/oversize-g.webp,./img/gafas/oversize-s.webp,./img/gafas/pantallahud-g.webp,./img/gafas/pantallahud-s.webp,./img/gafas/pantos-g.webp,./img/gafas/pantos-s.webp,./img/gafas/parche-g.webp,./img/gafas/parche-s.webp,./img/gafas/plegable-g.webp,./img/gafas/plegable-s.webp,./img/gafas/protesica-g.webp,./img/gafas/protesica-s.webp,./img/gafas/rectangulares-g.webp,./img/gafas/rectangulares-s.webp,./img/gafas/redondas-g.webp,./img/gafas/redondas-s.webp,./img/gafas/retro70-g.webp,./img/gafas/retro70-s.webp,./img/gafas/retro80-g.webp,./img/gafas/retro80-s.webp,./img/gafas/retroveinte-g.webp,./img/gafas/retroveinte-s.webp,./img/gafas/sinvarillas-g.webp,./img/gafas/sinvarillas-s.webp,./img/gafas/smart-g.webp,./img/gafas/smart-s.webp,./img/gafas/soft-g.webp,./img/gafas/soft-s.webp,./img/gafas/solar-g.webp,./img/gafas/solar-s.webp,./img/gafas/steampunk-g.webp,./img/gafas/steampunk-s.webp,./img/gafas/surf-g.webp,./img/gafas/surf-s.webp,./img/gafas/techwear-g.webp,./img/gafas/techwear-s.webp,./img/gafas/titanio-g.webp,./img/gafas/titanio-s.webp,./img/gafas/transicion-g.webp,./img/gafas/transicion-s.webp,./img/gafas/transparentes-g.webp,./img/gafas/transparentes-s.webp,./img/gafas/varillabaja-g.webp,./img/gafas/varillabaja-s.webp,./img/gafas/vintagecert-g.webp,./img/gafas/vintagecert-s.webp,./img/gafas/visera-g.webp,./img/gafas/visera-s.webp,./img/gafas/wayfarer-g.webp,./img/gafas/wayfarer-s.webp,./img/gafas/y2k-g.webp,./img/gafas/y2k-s.webp,./img/gafas/yuppie-g.webp,./img/gafas/yuppie-s.webp'.split(',').filter(s => s && s.indexOf('__') < 0); /* fotos de las monturas (las pone publicar.sh) */
 const BASE = ['./', './index.html', './manifest.webmanifest', './icons/icon-192.png', './icons/icon-512.png', './icons/apple-touch-icon.png'];
 
@@ -11,19 +15,21 @@ self.addEventListener('install', e => {
     const c = await caches.open(CACHE);
     const html = await (await fetch('./index.html', { cache: 'no-store' })).text();
     const assets = [...html.matchAll(/(?:src|href)="([^"#:]+)"/g)].map(m => './' + m[1].replace(/^\.\//, ''));
-    await c.addAll([...new Set(BASE.concat(assets, EXTRA))]);
+    await c.addAll([...new Set(BASE.concat(assets))]);
+    const p = await caches.open(PHOTOS);
+    await Promise.allSettled(EXTRA.map(async u => { if (!(await p.match(u))) { const r = await fetch(u); if (r.ok) await p.put(u, r); } }));
     await self.skipWaiting();
   })());
 });
 
 self.addEventListener('activate', e => {
-  e.waitUntil((async () => { for (const k of await caches.keys()) if (k !== CACHE) await caches.delete(k); await self.clients.claim(); })());
+  e.waitUntil((async () => { for (const k of await caches.keys()) if (k !== CACHE && k !== PHOTOS) await caches.delete(k); await self.clients.claim(); })());
 });
 
 self.addEventListener('fetch', e => {
   const r = e.request; if (r.method !== 'GET' || new URL(r.url).origin !== self.location.origin) return;
   e.respondWith((async () => {
-    const c = await caches.open(CACHE);
+    const isPhoto = /\/img\/gafas\//.test(new URL(r.url).pathname); const c = await caches.open(isPhoto ? PHOTOS : CACHE);
     if (r.mode === 'navigate') { try { const net = await Promise.race([fetch(r), new Promise((_, rej) => setTimeout(() => rej(new Error('lenta')), 3500))]); /* con mala cobertura, la copia guardada */ if (net.ok) c.put('./index.html', net.clone()); return net; } catch (err) { return (await c.match('./index.html')) || (await c.match('./')) || Response.error(); } }
     const hit = await c.match(r); if (hit) return hit;
     try { const net = await fetch(r); if (net.ok) c.put(r, net.clone()); return net; } catch (err) { return Response.error(); }

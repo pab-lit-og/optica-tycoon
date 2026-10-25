@@ -153,7 +153,7 @@ const Scene = {
     const saved = this.ctx; this.ctx = ctx; this._glass = []; this._glassBox = []; this._bulbs = [];
     // sombra general de la sala
     const a = this.iso(0, 0), b = this.iso(R, 0), cc = this.iso(R, R), d = this.iso(0, R);
-    ctx.save(); ctx.filter = 'blur(10px)'; this.poly([{ x: a.x, y: a.y + 14 }, { x: b.x + 10, y: b.y + 14 }, { x: cc.x, y: cc.y + 22 }, { x: d.x - 10, y: d.y + 14 }], 'rgba(0,0,0,0.28)'); ctx.restore();
+    /* sombra difuminada sin ctx.filter (Safari ≤17 no lo soporta): se dibuja la forma fuera de la vista y solo se ve su sombra */ { const off = 10000, k = ctx.getTransform ? ctx.getTransform().a : (this.dpr || 1); ctx.save(); ctx.shadowColor = 'rgba(0,0,0,0.28)'; ctx.shadowBlur = 10 * k; ctx.shadowOffsetX = off * k; this.poly([{ x: a.x - off, y: a.y + 14 }, { x: b.x + 10 - off, y: b.y + 14 }, { x: cc.x - off, y: cc.y + 22 }, { x: d.x - 10 - off, y: d.y + 14 }], '#000'); ctx.restore(); }
     this.drawFloor(L); this.drawWalls(L); if (lvl === 1) this.drawStallWeather(L); else { this.drawWindowLight(L); this.drawZoneFloors(L); }
     for (const g of this._glass) { const xs = g.map(p => p.x), ys = g.map(p => p.y); const x0 = Math.min(...xs), y0 = Math.min(...ys); this._glassBox.push({ x: x0, y: y0, w: Math.max(1, Math.max(...xs) - x0), h: Math.max(1, Math.max(...ys) - y0) }); }
     // mobiliario fijo (sin partes móviles) en orden de profundidad
@@ -341,7 +341,7 @@ const Scene = {
   PHOTO_ALIAS: {},
   photoSrc(topic, genre) { if (!this._phs) this._phs = new Set(this.PHOTOS.split(',')); const id = this._phs.has(topic) ? topic : this.PHOTO_ALIAS[topic]; if (!id || !this._phs.has(id)) return null; return 'img/gafas/' + id + (genre === 'sol' || genre === 'deportiva' ? '-s' : '-g') + '.webp'; },
   photo(src, cb) { this._ph = this._ph || new Map(); let e = this._ph.get(src);
-    if (!e) { e = { im: new Image(), cbs: [] }; e.im.decoding = 'async'; e.im.onload = () => { const l = e.cbs; e.cbs = []; l.forEach(f => f()); }; e.im.onerror = () => { e.bad = true; e.cbs = []; }; e.im.src = src; this._ph.set(src, e); }
+    if (!e) { e = { im: new Image(), cbs: [] }; e.im.decoding = 'async'; e.im.onload = () => { const l = e.cbs; e.cbs = []; l.forEach(f => f()); }; e.im.onerror = () => { e.bad = true; e.cbs = []; }; e.im.src = src; this._ph.set(src, e); if (this._ph.size > 60) { const k = this._ph.keys().next().value; if (k !== src) this._ph.delete(k); } }
     if (e.bad) return null; if (e.im.complete && e.im.naturalWidth) return e.im; if (cb) e.cbs.push(cb); return null; },
   /* miniatura para tablas, tarjetas y avisos: la foto si la hay; si no, data URL del dibujo (en caché) */
   previewURL(topic, genre) { const ph = this.photoSrc(topic, genre); if (ph) { this.photo(ph); return ph; } const key = topic + '|' + genre; this._pv = this._pv || new Map(); let u = this._pv.get(key); if (u) return u; try { const cv = document.createElement('canvas'); cv.width = 96; cv.height = 44; this.drawFramePreview(cv, topic, genre, true); u = cv.toDataURL(); } catch (e) { u = ''; } this._pv.set(key, u); return u; },

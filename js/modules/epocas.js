@@ -48,7 +48,7 @@
   /* tecnologías de las líneas de producción con efecto propio cuando la colección las usa */
   const PARTFX = {
     fut_guiaondas:      g => g.genre === 'inteligente' || g.secondGenre === 'inteligente' ? { score: 1.05 } : null,
-    fut_rx_guia:        g => g.genre === 'inteligente' ? { score: 1.03 } : null,
+    fut_lentes_impresas: g => g.genre === 'graduado' || g.genre === 'lectura' ? { cost: -0.04 } : null,
     fut_impresion3d:    g => g.size === 'small' || g.size === 'medium' ? { cost: -0.1 } : null,
     fut_micelio:        () => ({ cost: -0.05 }),
     fut_autorreparable: () => ({ cost: -0.03, sales: 1.03 }),
@@ -86,6 +86,8 @@
     { id: 'chips', y: 2044, m: 5, min: 2, h: 'Se avecina una crisis de chips', t: 'Los proveedores avisan: faltan chips y tierras raras y las gafas inteligentes se van a encarecer medio año. ¿Hacemos acopio?', o: ['Acopiar componentes (3 % de la caja)', 'Esperar y ver'] },
     { id: 'reparar', y: 2052, m: 3, min: 2, h: 'Derecho a reparar tus gafas', t: 'La nueva ley europea obliga a tener piezas y software durante diez años. ¿Montamos un servicio de reparación propio?', o: ['Montar el servicio (1 % de la caja)', 'Cumplir lo justo'] },
     { id: 'lentillas', y: 2058, m: 2, min: 2, h: 'La lentilla inteligente se masifica', t: 'Cada vez más clientes cambian la montura por lentillas con pantalla. ¿Formamos al equipo en su adaptación?', o: ['Formar al equipo (2 % de la caja)', 'Seguir con las monturas'] },
+    { id: 'fusion', y: 2066, m: 4, min: 3, h: 'Oferta de fusión', t: 'Una cadena europea de salud visual quiere fusionarse con nosotros: inyecta capital, pero impone su catálogo durante años.', o: ['Fusionarnos (+20 % de caja ahora, −10 % de ventas 5 años)', 'Seguir independientes'] },
+    { id: 'fundacion', y: 2071, m: 3, min: 3, h: 'Fundación de salud visual', t: 'Al acercarnos a los 80 años de historia, el patronato propone crear una fundación que gradúe gratis a quien no puede pagar.', o: ['Crear la fundación (−10 % de la caja)', 'No es el momento'] },
     { id: 'piloto_autofoco', y: 2027, m: 7, min: 2, h: 'Óptica piloto del autoenfoque', t: 'El fabricante de las lentes de cristal líquido busca ópticas piloto en Galicia: 40.000 € por el equipo de adaptación y formación.', o: ['Ser óptica piloto (−40.000 €)', 'Esperar a que se abaraten'] },
     { id: 'campana_escolar', y: 2030, m: 10, min: 2, h: 'Uno de cada tres escolares, miope', t: 'Los colegios piden ópticas que hagan cribados de miopía. Una campaña escolar cuesta 60.000 €.', o: ['Hacer la campaña escolar (−60.000 €)', 'No, gracias'] }
   ];
@@ -164,6 +166,8 @@
     else if (id === 'chips') { if (choice === 0) { co.adjustCash(-Math.round(Math.max(30000, co.cash * 0.03)), 'Acopio de componentes'); addFx(co, 'inteligente', 1 / 0.85, 26); } }
     else if (id === 'reparar') { if (choice === 0) { co.adjustCash(-Math.round(Math.max(20000, co.cash * 0.01)), 'Servicio de reparación'); addFx(co, '*', 1.03, 240); co.adjustFans(Math.round(co.fans * 0.01)); } else addFx(co, '*', 0.98, 96); }
     else if (id === 'lentillas') { if (choice === 0) { co.adjustCash(-Math.round(Math.max(40000, co.cash * 0.02)), 'Formación en lentillas inteligentes'); addFx(co, 'style:lentillaint', 1.25, 144); addFx(co, 'graduado', 1.04, 144); } else addFx(co, 'inteligente', 0.92, 52); }
+    else if (id === 'fusion') { if (choice === 0) { co.adjustCash(Math.round(Math.max(0, co.cash) * 0.2), 'Fusión: capital europeo'); addFx(co, '*', 0.9, 240); } }
+    else if (id === 'fundacion') { if (choice === 0) { co.adjustCash(-Math.round(Math.max(100000, co.cash * 0.1)), 'Fundación de salud visual'); co.adjustFans(Math.round(co.fans * 0.05)); addFx(co, '*', 1.08, 240); } }
     else if (id === 'piloto_autofoco') { if (choice === 0) { co.adjustCash(-40000, 'Óptica piloto del autoenfoque'); co.adjustFans(Math.round(co.fans * 0.03) + 200); addFx(co, 'lectura', 1.1, 52); addFx(co, 'graduado', 1.05, 52); G.log('Somos óptica piloto del autoenfoque: más clientes présbitas durante un año.'); } }
     else if (id === 'campana_escolar') { if (choice === 0) { co.adjustCash(-60000, 'Campaña escolar de miopía'); co.adjustFans(Math.round(co.fans * 0.02) + 300); addFx(co, 'infantil', 1.1, 96); } else addFx(co, 'infantil', 1.04, 96); }
     else if (id === 'ransomware') { if (choice === 0) co.adjustCash(-(n && n.cost || 25000 * co.level), 'Rescate de datos'); else { addFx(co, 'graduado', 0.9, 2); co.adjustFans(-Math.round(co.fans * 0.01)); } }
