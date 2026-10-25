@@ -38,7 +38,7 @@ button { font-family: inherit; }
 #actions .dept.sep { color: #9aa4ad; font-size: 10px; text-transform: uppercase; letter-spacing: .5px; text-align: center; margin-top: 8px; padding-top: 6px; border-top: 1px solid #4b545c; }
 #actions button.dept { background: linear-gradient(#3f5240, #2f3f31); border-color: #4e6b50; }
 #actions button.dept:hover { background: linear-gradient(#55705a, #3f5240); }
-#scene { flex: 1 1 auto; position: relative; min-width: 0; }
+#scene { flex: 1 1 auto; position: relative; min-width: 0; overflow: hidden; }
 #canvas { display: block; width: 100%; height: 100%; }
 #trendBadge { position: absolute; left: 12px; top: 12px; background: var(--panel); border: 2px solid var(--panel-border); padding: 5px 12px; border-radius: 6px; font-weight: 600; display: none; box-shadow: 0 2px 6px rgba(0,0,0,.25); }
 #side { width: 300px; flex: 0 0 auto; background: #e8e2d6; display: flex; flex-direction: column; gap: 8px; padding: 8px; overflow-y: auto; border-left: 1px solid #cfc6b6; }
@@ -311,3 +311,36 @@ ul.path .when { display: inline-block; min-width: 68px; color: #7a6f5d; font-siz
 html { -webkit-text-size-adjust: 100%; }
 body { touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
 #scene, #scene canvas, #actions, #topbar, .btn, .speedBtn, .sel { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+
+/* auditoría de interfaz (oct 2026): tamaños táctiles, foco visible, movimiento reducido y textos mínimos de 12 px */
+.logitem { font-size: 12.5px; }
+.dcard small, #topbar .brand small { font-size: 12px; }
+:focus-visible { outline: 2px solid var(--orange2); outline-offset: 2px; }
+.sel:active, .speedBtn:active, #viewTabs button:active, .dcard:active { transform: scale(.97); }
+@media (hover: none) { .kbd { display: none; } }
+@media (pointer: coarse) {
+  .speedBtn, #btnMenu, #btnSound { min-width: 44px; min-height: 44px; }
+  #viewTabs button { min-height: 40px; padding: 8px 12px; }
+  #actions button { min-height: 42px; }
+  .btn.small { min-height: 36px; padding: 7px 12px; font-size: 13px; }
+  .sel { min-height: 44px; }
+  .mclose { min-width: 44px; min-height: 44px; }
+  #ctx button { min-height: 44px; }
+  .srow input[type=range]::-webkit-slider-thumb { height: 30px; }
+  .modal select, .modal input[type=text], .modal input:not([type]) { min-height: 40px; font-size: 16px; } /* 16 px: Safari no hace zoom al enfocar */
+}
+@media (prefers-reduced-motion: reduce) {
+  .modal, .toast, .banner { animation-duration: .01s !important; }
+  .reviews.seq .review, .reviews.seq .rscore, .rv-after { animation-duration: .15s; }
+  .btn:active, #actions button:active, .sel:active, .speedBtn:active { transform: none; }
+}
+/* asistente: la vista previa de la montura arriba, siempre a la vista mientras se elige estilo y tipo */
+.wtop { display: flex; gap: 14px; align-items: flex-start; }
+.wtopl { flex: 1; min-width: 0; }
+.wtop .wprev { margin-top: 4px; }
+@media (max-width: 760px) { .wtop { flex-direction: column; } .wtop .wprev { align-self: center; } }
+/* Safari < 17.4 no pone verticales los range con writing-mode: deslizador horizontal girado (main.js añade .oldrange) */
+.oldrange .srow input[type=range] { writing-mode: horizontal-tb; direction: ltr; width: 180px; height: 34px; margin: 81px -73px; transform: rotate(-90deg); cursor: ns-resize; }
+.oldrange .srow input[type=range]::-webkit-slider-thumb { width: 20px; height: 46px; }
+@media (max-width: 1000px), (max-height: 800px) { .oldrange .srow input[type=range] { width: 140px; height: 34px; margin: 61px -53px; } }
+@media (pointer: coarse) { .oldrange .srow input[type=range]::-webkit-slider-thumb { width: 30px; height: 46px; } }

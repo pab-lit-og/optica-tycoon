@@ -312,7 +312,7 @@ function newGame(co) {
 const Reviews = {
   expectedTop(co) {
     if (co.lastTopScore) {
-      const y = co.getCurrentDate().year; const b0 = 1.0; void y; /* sin inflar el listón: tras un éxito la siguiente colección no se hunde por sistema */ const c = co.previousTopScore ? co.previousTopScore : 20;
+      const y = co.getCurrentDate().year; const b0 = 0.5; void y; /* el listón sube la mitad de lo superado: acertar todo vuelve a dar buena nota */ const c = co.previousTopScore ? co.previousTopScore : 20;
       const b = Math.floor(co.lastTopScore + co.lastTopScoreIncrease * b0); const l = 6 + 9 * General.sizeDuration(co.lastTopScoreGameSize || 'small');
       return (!co.lastTopScoreWeek || co.currentWeek >= co.lastTopScoreWeek + l) ? b : Math.floor(c + (b - c) * (co.currentWeek - co.lastTopScoreWeek) / l);
     } return 20;
@@ -334,7 +334,9 @@ const Reviews = {
   },
   techFactor(co, g) {
     const ex = Reviews.expertCount(co, g); if (ex >= 2) g.flags.psEnabled = true; g.flags.expertCount = ex;
-    if ((g.size === 'small' && co.level >= 2) || (g.size === 'medium' && co.fans <= 1e5)) return 9;
+    if (g.size === 'small' && co.level >= 2) { g.flags.techWhy = 'small'; return 9; }
+    if (g.size === 'medium' && co.fans <= 2e4) { g.flags.techWhy = 'medium'; return 9; }
+    g.flags.techWhy = g.size === 'aaa' ? 'aaa' : g.size === 'large' ? 'large' : '';
     let l = g.techLevel || 0;
     if (g.size === 'large') { l = U.clamp(3 - l, 0, 3); return 10 - l; }
     if (g.size === 'aaa') { l = U.clamp(5 - l, 0, 3); const c = U.clamp(3 - ex, 0, 3); return 10 - (l + 0.6 * c); }
@@ -382,7 +384,7 @@ const Reviews = {
     const B = Reviews.expectedTop(co); let z = score / B; const zMods = z;
     if (z >= 0.6 && (aw <= 0.7 || topicW <= 0.7)) z = 0.6 + (z - 0.6) / 2;
     const comboCap = z / Math.max(1e-9, zMods);
-    if (z > 0.7) for (const pl of plats) { if (W.platformAudience([pl], g.targetAudience, true) <= 0.8) { score *= W.platformAudience([pl], g.targetAudience, true); z = score / B; break; } }
+    let chanAud = 1; if (z > 0.7) for (const pl of plats) { const pa = W.platformAudience([pl], g.targetAudience, true); if (pa < 0.8) { chanAud = pa; score *= pa; z = score / B; break; } }
     z = U.clamp(10 * z, 1, 10);
     /* fracción del equipo de colecciones (sin contar departamentos) que ha trabajado en esta colección */
     { const team = co.staff.filter(st => !st.assignment); const n = team.filter(st => g.flags.staffContribution && g.flags.staffContribution[st.id]).length; g.flags.teamContribution = team.length ? n / team.length : 1; }
@@ -391,25 +393,26 @@ const Reviews = {
       let q = 6; const opt = General.optimalTeam(g); const diff = Math.abs(opt - co.staff.length); if (diff > 1) q -= diff - 1; if (newStaff.length) q -= newStaff.length / 2;
       q += u / 2 - t / 2; if (A < 0.9) q -= 0.5; else if (A <= 0.6) q -= 1; if (pw <= 0.8) q -= 1 - pw; if (aw <= 0.8) q -= 1 - aw; q -= U.rnd(); q = Math.min(q, 7.7);
       if (z < q) { g.flags.scoreWithoutBrackets = z; z = q; }
-      if (co.gameLog.length > 3) { let bad = true; for (let i = 1; i <= 3; i++) { const gg = co.gameLog[co.gameLog.length - i]; if (gg.score > 5.2 - 0.2 * gg.platforms.length && !gg.flags.scoreWithoutBrackets) { bad = false; break; } } if (bad) { co.lastTopScore = score; g.flags.topScoreDecreased = true; } }
+      if (co.gameLog.length > 3) { let bad = true; for (let i = 1; i <= 3; i++) { const gg = co.gameLog[co.gameLog.length - i]; if (gg.score > 5.2 - 0.2 * gg.platforms.length && !gg.flags.scoreWithoutBrackets) { bad = false; break; } } if (bad) { co.lastTopScore = score / trend; g.flags.topScoreDecreased = true; } }
     }
     const tf = Reviews.techFactor(co, g) / 10; if (g.size !== 'small' && g.size !== 'medium' && tf < 1) neg.push(g.size === 'aaa' && (g.flags.expertCount || 0) < 3 ? 'Una colección insignia necesita especialistas al frente de sus campos clave.' : 'La tecnología no está a la última.'); z *= tf;
     if (z >= 9) {
       let reduce = false; if (s < 0.1 && U.rnd() < 0.8) reduce = true; else if (newStaff.length) { reduce = true; g.flags.newStaffIds = newStaff.map(x => x.id); }
-      if (reduce) { z = g.flags.newStaffIds && g.flags.newStaffIds.length ? 8.15 + 0.95 / g.flags.newStaffIds.length * U.rnd() : 8.45 + 0.65 * U.rnd(); if (U.rnd() < 0.1) z = 9 + 0.25 * U.rnd(); Reviews.setTopScore(co, score); }
+      if (reduce) { z = g.flags.newStaffIds && g.flags.newStaffIds.length ? 8.15 + 0.95 / g.flags.newStaffIds.length * U.rnd() : 8.45 + 0.65 * U.rnd(); if (U.rnd() < 0.1) z = 9 + 0.25 * U.rnd(); Reviews.setTopScore(co, score / trend); }
     }
     if (seq) { if (z <= 4) neg.push('¡Qué segunda edición tan horrible!'); else if (z <= 7) neg.push('Una segunda edición del montón.'); else pos.push('¡Gran segunda edición!'); }
-    if (co.topScoreAchievements < 2 && co.getCurrentDate().year < 4) { if (z === 10) { z -= 1.05 + 0.45 * U.rnd(); Reviews.achieveTop(co, score); } else if (z >= 9) { z -= 1.05 + 0.2 * U.rnd(); Reviews.achieveTop(co, score); } else if (z > 8.5) z -= 0.4 + 0.2 * U.rnd(); }
-    if (z >= 9) Reviews.achieveTop(co, score);
+    if (co.topScoreAchievements < 2 && co.getCurrentDate().year < 4) { if (z === 10) { z -= 1.05 + 0.45 * U.rnd(); Reviews.achieveTop(co, score / trend); } else if (z >= 9) { z -= 1.05 + 0.2 * U.rnd(); Reviews.achieveTop(co, score / trend); } else if (z > 8.5) z -= 0.4 + 0.2 * U.rnd(); }
+    if (z >= 9) Reviews.achieveTop(co, score / trend);
     if (z !== 10 && g.flags.topScore && co.topScoreAchievements === 3) z = 10;
     g.score = z; g.rawScore = score; g.expectedScore = B;
-    { const base = (p + r) / 2 / General.sizePoints(g); const zBase = U.clamp(10 * base / B, 0, 10); const zPre = U.clamp(10 * zMods * comboCap, 0, 10);
-      g.flags.breakdown = { base: zBase, final: z, expected: B, topicW, rows: [
+    { const base = (p + r) / 2 / General.sizePoints(g); const zBase = U.clamp(10 * base / B, 0, 10); const zPre = U.clamp(10 * zMods * comboCap * chanAud, 0, 10);
+      g.flags.breakdown = { base: zBase, final: z, expected: B, raw: Math.round((p + r) / 2 / General.sizePoints(g)), topicW, rows: [
         { k: 'time', label: 'Reparto del tiempo entre campos', f: 1 + sTime },
         { k: 'balance', label: 'Equilibrio diseño / técnica', f: 1 + sBal },
         { k: 'other', label: 'Repeticiones y segundas ediciones', f: 1 + sOther },
         { k: 'channel', label: 'Encaje del tipo con el canal', f: pw },
         { k: 'audience', label: 'Encaje del estilo con el público', f: aw },
+        { k: 'chanaud', label: 'Encaje del canal con el público', f: chanAud },
         { k: 'bugs', label: 'Defectos de fabricación', f: A },
         { k: 'mix', label: 'Mezcla de canales muy distintos', f: techPen },
         { k: 'trend', label: 'Tendencia del mercado', f: trend },
@@ -613,6 +616,8 @@ const G = {
 
   /* ---------- inicio ---------- */
   newGame(companyName, playerName) {
+    /* la partida anterior no se pierde: queda como copia («Recuperar partida anterior») */
+    if (this.company) this.save(); try { const p = localStorage.getItem(G.SAVE_KEY); if (p) localStorage.setItem(G.SAVE_KEY + '.bak', p); } catch (e) { /* sin almacenamiento */ }
     this.removeOwnPlatforms();
     this.company = new Company(companyName, playerName); this.gameTime = 0; this.currentFeature = null; this.featureQueue = []; this.currentEngineDev = null; this.currentContract = null; this.contracts = null; this.hireSearch = null; this.candidates = null; this.points = []; this.unreadLog = [];
     this.paused = true; this.speed = 1; Modules.init(this.company);
@@ -904,7 +909,7 @@ const G = {
     { const i = co.notifications.findIndex(n => n.sourceId === 'reviews' && n.game === g); if (i > q0) co.notifications.splice(q0, 0, co.notifications.splice(i, 1)[0]); } /* el veredicto no se adelanta a la crítica */
     g.flags.cfWeek = Math.floor(co.currentWeek) + 4 + Math.floor(4 * U.rnd()); /* las copias aparecen cuando la colección ya se vende, no el día del lanzamiento */
     if (co.gameLog.length === 1) this.notify('Noticias', `Una pequeña óptica llamada ${co.name} ha presentado su primera colección, "${g.title}". El sector mira con curiosidad.`, 'sales');
-    if (co.gameLog.length === 1) this.notify('Investigación', `Ya podemos investigar (botón Investigar, tecla I). Tenemos ${co.researchPoints} 🔬: un estilo nuevo cuesta 10 y el taller propio 50. Mientras investigas no se avanza en colecciones: hazlo entre una y otra.`);
+    if (co.gameLog.length === 1) this.notify('Investigación', `Ya podemos investigar (botón Investigar). Tenemos ${co.researchPoints} 🔬: un estilo nuevo cuesta 10 y el taller propio 50. Mientras investigas no se avanza en colecciones: hazlo entre una y otra.`);
     this.emit('refresh');
   },
   trashGame() { const co = this.company; co.currentGame = null; this.currentFeature = null; this.featureQueue = []; for (const s of co.staff) if (s.state === 'working') s.state = 'idle'; if (this.currentContract && this.currentContract.type === 'gameContract') this.finishPublisherContract(false); this.emit('refresh'); },
@@ -1223,6 +1228,9 @@ const G = {
     try { const raw = localStorage.getItem(G.SAVE_KEY); if (!raw) return false; const d = JSON.parse(raw); this.removeOwnPlatforms(); this.company = Company.load(d.company); this.gameTime = d.gameTime; this.currentFeature = d.currentFeature; this.featureQueue = d.featureQueue || []; this.currentEngineDev = d.currentEngineDev; this.currentContract = d.currentContract; this.contracts = d.contracts; this.hireSearch = d.hireSearch; this.candidates = d.candidates; this.unreadLog = d.unreadLog || []; this.points = []; this.paused = true; this.modalOpen = false; for (const p of this.company.ownPlatforms) this.addOwnPlatform(p, true); Modules.init(this.company); if (this.company.maxStaff < C.LEVELS[this.company.level].maxStaff) this.company.maxStaff = C.LEVELS[this.company.level].maxStaff; this.company.notifications = this.company.notifications.filter(n => n.sourceId !== 'sliders'); if (this.company.currentGame && !this.currentFeature && !this.featureQueue.length && this.company.currentGame.stage < 3) { this.modalOpen = true; this.emit('sliders', this.company.currentGame.stage + 1); } this.emit('newgame'); this.emit('refresh'); return true; } catch (e) { console.error(e); return false; }
   },
   hasSave() { try { return !!localStorage.getItem(G.SAVE_KEY); } catch (e) { return false; } },
+  hasBackup() { try { return !!localStorage.getItem(G.SAVE_KEY + '.bak'); } catch (e) { return false; } },
+  /* vuelve a la partida que había antes de pulsar «Nueva partida» (la actual pasa a ser la copia) */
+  restoreBackup() { try { const b = localStorage.getItem(G.SAVE_KEY + '.bak'); if (!b) return false; if (this.company) this.save(); const cur = localStorage.getItem(G.SAVE_KEY); localStorage.setItem(G.SAVE_KEY, b); if (cur) localStorage.setItem(G.SAVE_KEY + '.bak', cur); return this.load(); } catch (e) { return false; } },
   /* copia de la partida en un archivo, para pasarla entre dispositivos (PC ↔ iPad) */
   exportSave() { if (this.company) this.save(); try { return localStorage.getItem(G.SAVE_KEY); } catch (e) { return null; } },
   importSave(text) {
@@ -1233,5 +1241,5 @@ const G = {
     if (this.load()) return null;
     try { if (prev) localStorage.setItem(G.SAVE_KEY, prev); else localStorage.removeItem(G.SAVE_KEY); } catch (e) { /* nada */ } return 'No se pudo cargar esa partida.'; },
   /* borra la partida guardada (y restos de versiones anteriores) */
-  deleteSave() { try { for (const k of ['opticaTycoon.save', 'opticaTycoon.v2', 'opticaTycoon.v3', G.SAVE_KEY]) localStorage.removeItem(k); return true; } catch (e) { return false; } }
+  deleteSave() { try { for (const k of ['opticaTycoon.save', 'opticaTycoon.v2', 'opticaTycoon.v3', G.SAVE_KEY, G.SAVE_KEY + '.bak']) localStorage.removeItem(k); return true; } catch (e) { return false; } }
 };

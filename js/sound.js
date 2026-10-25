@@ -8,7 +8,7 @@ const Sound = {
     try { const v = localStorage.getItem('opticaTycoon.sound'); if (v === '0') this.on = false; } catch (e) { /* sin almacenamiento */ }
   },
   ensure() {
-    if (this.ctx) { if (this.ctx.state === 'suspended') this.ctx.resume().catch(() => {}); return this.ctx; }
+    if (this.ctx) { if (this.ctx.state !== 'running') this.ctx.resume().catch(() => {}); /* iOS: 'interrupted' tras llamadas o segundo plano */ return this.ctx; }
     const AC = typeof window !== 'undefined' && (window.AudioContext || window.webkitAudioContext); if (!AC) return null;
     try { this.ctx = new AC(); this.master = this.ctx.createGain(); this.master.gain.value = 0.22; this.master.connect(this.ctx.destination); } catch (e) { this.ctx = null; }
     return this.ctx;

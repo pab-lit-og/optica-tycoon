@@ -26,9 +26,9 @@ const Scene = {
     this.canvas = canvas; this.ctx = canvas.getContext('2d'); this.resize(); window.addEventListener('resize', () => this.resize());
     canvas.addEventListener('mousemove', e => { const p = this.toLocal(e); this.hover = this.hitTest(p.x, p.y); canvas.style.cursor = this.hover ? 'pointer' : 'default'; });
     canvas.addEventListener('mouseleave', () => { this.hover = null; });
-    canvas.addEventListener('click', e => { const p = this.toLocal(e); const h = this.hitTest(p.x, p.y); if (h && typeof UI !== 'undefined') UI.onSceneClick(h, e); });
+    canvas.addEventListener('click', e => { const p = this.toLocal(e); const h = this.hitTest(p.x, p.y); if (!matchMedia('(hover: hover)').matches) this.hover = null; /* en táctil no hay mouseleave: sin esto el globo se queda pegado */ if (h && typeof UI !== 'undefined') UI.onSceneClick(h, e); });
   },
-  resize() { const r = this.canvas.parentElement.getBoundingClientRect(); const dpr = Math.min(2, window.devicePixelRatio || 1); this.dpr = dpr; this.W = Math.max(600, Math.floor(r.width)); this.H = Math.max(400, Math.floor(r.height)); this.canvas.width = this.W * dpr; this.canvas.height = this.H * dpr; this.canvas.style.width = this.W + 'px'; this.canvas.style.height = this.H + 'px'; this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0); this.bgKey = ''; this.spriteCache.clear(); },
+  resize() { const r = this.canvas.parentElement.getBoundingClientRect(); const dpr = Math.min(2, window.devicePixelRatio || 1); this.dpr = dpr; this.W = Math.max(300, Math.floor(r.width)); this.H = Math.max(240, Math.floor(r.height)); this.canvas.width = this.W * dpr; this.canvas.height = this.H * dpr; this.canvas.style.width = this.W + 'px'; this.canvas.style.height = this.H + 'px'; this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0); this.bgKey = ''; this.spriteCache.clear(); },
   toLocal(e) { const r = this.canvas.getBoundingClientRect(); return { x: (e.clientX - r.left), y: (e.clientY - r.top) }; },
   co() { return G.company; },
   level() { return this.co() ? this.co().level : 1; },
