@@ -680,7 +680,7 @@ const G = {
     this.offerReports(w); this.checkBoosts(w);
     for (const g of co.gameLog) if (g.flags && g.flags.cfWeek && w >= g.flags.cfWeek) { delete g.flags.cfWeek; if (!g.soldOut) this.checkCounterfeit(g); }
     Modules.call('weekly', co, w, d);
-    if (d.week === 1) { const b = General.monthlyCosts(co); co.adjustCash(-b, 'Gastos mensuales'); if (co.currentGame) co.currentGame.costs += b; if (!Modules.get('gabinete')) this.gabineteIncome(); this.subscriptionIncome(); Modules.call('monthly', co, d); }
+    if (d.week === 1) { const b = General.monthlyCosts(co); co.adjustCash(-b, 'Gastos mensuales'); if (co.currentGame) co.currentGame.costs += b; if (!Modules.get('gabinete')) this.gabineteIncome(); this.subscriptionIncome(); Modules.call('monthly', co, d); if (co.branches) co.adjustCash(this.branchesNet(co), 'Red de sucursales'); }
     if (d.month === 1 && d.week === 1 && d.year > 1) { const ry = U.realYear(d.year); const nuevos = DATA.TOPICS.filter(t => t.year === ry); if (nuevos.length) this.log(`🆕 Nuevos estilos en el mercado (${ry}): ${nuevos.map(t => t.name).join(', ')}. Ya se pueden investigar.`); }
     Trends.update(co);
     if (co.startYear !== 1995 && d.week === 1) { if (!co.flags.targetAudienceStory && co.playedAtLeast(2, 6)) { co.flags.targetAudienceStory = true; this.notify('Público objetivo', 'Los estudios de mercado empiezan a segmentar las ventas de gafas por edades. Investigar «Público objetivo» permitiría orientar mejor cada colección.'); } if (!co.flags.marketingStory && co.playedAtLeast(3, 4)) { co.flags.marketingStory = true; this.notify('Publicidad', 'Las revistas de moda lanzan secciones de óptica. Investigar «Marketing» permitiría anunciar las colecciones antes de su lanzamiento.'); } }
@@ -781,6 +781,13 @@ const G = {
     const reasons = []; if (co.cash < def.cash) reasons.push(`caja mínima ${U.money(def.cash)} (tienes ${U.money(co.cash)})`); if (co.staff.length < def.staff) reasons.push(`${def.staff} persona${def.staff > 1 ? 's' : ''} en plantilla`); if (co.gameLog.length < def.games) reasons.push(`${def.games} colecciones lanzadas (llevas ${co.gameLog.length})`); if (!this.isIdle()) reasons.push('ningún proyecto en marcha');
     return Object.assign({ level: l, name: C.LEVELS[l].name, ok: reasons.length === 0, reasons }, def);
   },
+  /* red de ópticas (sumidero de dinero en la insignia): cada sucursal cuesta más y rinde algo menos que la anterior */
+  BRANCH_MAX: 12,
+  branchCost(n) { return Math.round(5e6 * Math.pow(1.6, n)); },
+  branchIncome(co, i) { return Math.round(Math.min(600000, 150000 + (co.fans || 0) * 0.05) * Math.pow(0.85, i)); },
+  branchUpkeep: 60000,
+  branchesNet(co) { let n = 0; for (let i = 0; i < (co.branches || 0); i++) n += this.branchIncome(co, i) - this.branchUpkeep; return n; },
+  openBranch() { const co = this.company; const n = co.branches || 0; if (co.level < 4 || n >= this.BRANCH_MAX) return false; const c = this.branchCost(n); if (!this.canSpend(c)) return false; co.adjustCash(-c, 'Nueva sucursal'); co.branches = n + 1; co.adjustFans(Math.round(co.fans * 0.03) + 2000); this.log(`🏪 Abrimos la sucursal n.º ${co.branches} de ${co.name}.`); this.emit('refresh'); return true; },
   moveToLevel(l) {
     const co = this.company; const cost = l === 4 ? 4e6 : 150000; co.adjustCash(-cost, 'Nuevo local'); co.level = l; co.maxStaff = C.LEVELS[l].maxStaff;
     const txt = { 2: 'Nos hemos mudado al local comercial. Ya podemos contratar hasta 4 empleados (menú Personal) e investigar colecciones medianas.', 3: 'Reforma terminada: ahora tenemos gabinete optométrico (investígalo para empezar a recibir pacientes), sala de formación y un taller mejor equipado. Hay nuevos cursos disponibles.', 4: 'Bienvenidos a la óptica insignia. Hasta 6 empleados, laboratorio de I+D y mucho más espacio.' }[l];

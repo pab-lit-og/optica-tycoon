@@ -27,6 +27,18 @@ const Advisor = {
   },
   DEPT_NAMES: { gabinete: 'el gabinete', taller: 'el taller', lab: 'el laboratorio', tienda: 'la tienda', marketing: 'marketing' },
 
+  /* alertas de los departamentos (las mismas cifras que enseñan sus paneles) */
+  deptAlerts(co) {
+    const out = []; const w = Math.floor(co.currentWeek);
+    try { const T = Modules.get('tienda'); if (T && T.api && co.level >= 2) { const s = T.api.state(co); const c = T.api.compute(co, s, w); const att = c.attention || 0; if (c.visits > 20 && att < 0.7) out.push({ dept: 'tienda', p: 62, icon: '🏬', title: `La tienda solo atiende al ${Math.round(att * 100)} %`, why: 'Muchos clientes se van sin comprar. Pon a otra persona en la tienda (ficha → Destino: Tienda) o contrata un asesor de ventas.', go: 'staff' }); } } catch (e) { /* sin tienda */ }
+    try { const Gb = Modules.get('gabinete'); const s = co.modules && co.modules.gabinete; if (Gb && Gb.api && s && (s.tier || 0) > 0) { const c = Gb.api.compute(co, s, w); if (c.lost >= 1) out.push({ dept: 'gabinete', p: 58, icon: '👁️', title: `Agenda del gabinete llena (${Math.round(c.lost)} se van sin cita)`, why: 'Hace falta más capacidad: otra persona óptica en el gabinete, instrumental más rápido o un box más.', go: 'dept:gabinete' }); } } catch (e) { /* sin gabinete */ }
+    for (const id of ['taller', 'lab']) { const st = co.modules && co.modules[id]; if (st && (st.tier || 0) >= 2 && !co.staff.some(x => x.assignment === id)) out.push({ dept: id, p: 46, icon: id === 'taller' ? '🛠️' : '🧪', title: `${id === 'taller' ? 'El taller' : 'El laboratorio'} no tiene a nadie`, why: 'Está montado pero sin personal asignado rinde al mínimo. Asigna a alguien desde su ficha.', go: 'staff' }); }
+    return out;
+  },
+  /* la investigación que el asesor recomienda ahora (la marca Investigación con ⭐) */
+  bestResearch(co) { const fixed = this.fixed(co); const rank = it => { const i = this.RESEARCH_ORDER.indexOf(it.id); return i < 0 ? 50 + (it.v || 0) : i; };
+    const avail = (co.availableResearch || []).filter(id => id !== 'NewTopic' && !co.researchCompleted.includes(id)).map(id => DB.item(id)).filter(Boolean).sort((a, b) => rank(a) - rank(b));
+    const can = avail.filter(it => co.researchPoints >= Research.pointsCost(it) && co.cash - Research.researchCost(it) > fixed); return (can[0] || avail[0] || {}).id || null; },
   has(co, id) { return co.hasResearch ? co.hasResearch(id) : (co.researchCompleted || []).includes(id); },
   researching(co) { return co.staff.some(s => s.currentResearch); },
   fixed(co) { try { return General.monthlyCosts(co); } catch (e) { return 0; } },
@@ -85,6 +97,10 @@ const Advisor = {
         else if (co.staff.length < co.maxStaff) add(35, '🧑‍🔧', `${this.DEPT_NAMES[id][0].toUpperCase() + this.DEPT_NAMES[id].slice(1)} no tiene personal`, 'Contrata a alguien para ese departamento (rol técnico/a o de laboratorio) y asígnalo.', 'staff');
       }
     }
+    // 8a. dinero de sobra en la insignia: red de sucursales
+    if (co.level >= 4 && (co.branches || 0) < G.BRANCH_MAX && co.cash > G.branchCost(co.branches || 0) * 2.5) add(40, '🏪', 'Abre una sucursal', `Te sobra caja: una sucursal cuesta ${U.money(G.branchCost(co.branches || 0))} y da ${U.money(G.branchIncome(co, co.branches || 0))}/mes y más clientes fieles.`, 'local');
+    // 8b. alertas de departamentos
+    for (const a of this.deptAlerts(co)) if (!out.some(o => o.title === a.title)) add(a.p, a.icon, a.title, a.why, a.go);
     // 9. objetivos cercanos
     if (nl && !nl.ok) add(25, '🎯', `Para pasar a ${nl.name}`, 'Te falta: ' + nl.reasons.join(', ') + '.', 'local');
     if (g && G.currentFeature && G.currentFeature.id === 'BugFixing' && G.currentFeature.progress >= 1 && (g.bugs || 0) > 0) add(40, '🧪', 'Colección lista para lanzar', `Quedan ${Math.round(g.bugs)} defectos: el equipo sigue corrigiendo. Espera a 0 para mejor nota o pulsa «Lanzar ya».`, null);

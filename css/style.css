@@ -375,3 +375,12 @@ body { touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
 .mhead h2 .mhsub { display: block; font-size: 13px; font-weight: 600; color: var(--muted); letter-spacing: 0; }
 .btn.danger.subtle { background: none; border-color: transparent; color: #b03a2e; box-shadow: none; text-decoration: underline; min-width: 0 !important; font-weight: 600; }
 .grid.eras .dif { float: right; color: #c27c0e; font-size: 12px; letter-spacing: 1px; }
+/* subpestañas automáticas de las ventanas largas */
+.sectabs { display: flex; flex-wrap: wrap; gap: 5px; margin: 2px 0 10px; padding-bottom: 8px; border-bottom: 1px dashed var(--line); position: sticky; top: -1px; background: var(--panel); z-index: 2; }
+.sectabs .btn { min-width: 0; }
+.tag.rec { background: #fff1c9; color: #8a5a00; border: 1px solid #e8c25a; }
+.dcard.warn { border-color: #e17055; box-shadow: inset 3px 0 0 #e17055; }
+.dcard .dwarn { display: block; font-size: 11.5px; font-weight: 600; color: #c0392b; }
+.grid.eras .dif { font-weight: 700; letter-spacing: 0; text-transform: uppercase; font-size: 10.5px; padding: 1px 6px; border-radius: 8px; background: #eef7e8; color: #2e7d32; }
+.grid.eras .dif-media { background: #fff4dc; color: #a66300; }
+.grid.eras .dif-difícil { background: #fde8e4; color: #b03a2e; }
