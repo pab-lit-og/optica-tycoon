@@ -727,7 +727,7 @@ const G = {
     if (this.hireSearch && w >= this.hireSearch.targetWeek && !this.candidates) { this.candidates = this.generateApplicants(this.hireSearch); this.notify('Candidatos', `Han llegado ${this.candidates.length} candidaturas para el puesto. Revísalas en el menú de personal.`, 'decision', { sourceId: 'hire' }); }
     if (this.currentContract && this.currentContract.type === 'generic' && w >= this.currentContract.deadlineWeek) this.finishContract(false);
     if (d.month === 1 && d.week === 1 && d.year > 1) { this.yearlyAwards(d.year - 1); this.yearlyRecap(d.year - 1); }
-    if (d.month === 1 && d.week === 1 && (d.year === 36 || d.year === 71 || d.year === 106) && !co.flags['relevo' + d.year]) { co.flags['relevo' + d.year] = true; const best = this.bestHeirEmployee(); this.notify('Relevo generacional', `Han pasado ${d.year - 1} años desde que se abrió el puesto del mercado. Toca decidir quién lleva la óptica a partir de ahora.`, 'decision', { sourceId: 'relevo', options: ['Lo coge mi hija o mi hijo (talento parecido, menos experiencia, +3 % de clientes fieles)', best ? `Se la dejo a ${best.name} (ocupa tu puesto con su talento y deja una plaza libre)` : 'Busco un gerente de fuera (menos experiencia)', 'Vender la óptica y retirarme (fin de la partida: el patrimonio suma a la puntuación)'] }); }
+    if (d.month === 1 && d.week === 1 && (d.year === 36 || d.year === 71 || d.year === 106) && !co.flags['relevo' + d.year]) { co.flags['relevo' + d.year] = true; const best = this.bestHeirEmployee(); this.notify('Relevo generacional', `Han pasado ${d.year - 1} años desde que se abrió el puesto del mercado. Toca decidir quién lleva la óptica a partir de ahora.`, 'decision', { sourceId: 'relevo', options: ['Lo coge mi hija o mi hijo (talento parecido, menos experiencia, +3 % de clientes fieles y +4 % de ventas para siempre)', best ? `Se la dejo a ${best.name} (ocupa tu puesto con su talento, deja una plaza libre y aporta la ventaja de su oficio: ${DATA.roleById(best.role).name.toLowerCase()})` : 'Busco un gerente de fuera (menos experiencia)', 'Vender la óptica y retirarme (fin de la partida: el patrimonio suma a la puntuación)'] }); }
     if (d.month === 1 && d.week === 1 && co.realYear() >= this.END_YEAR && !co.flags.end2076) { co.flags.end2076 = true; co.flags.endReason = 'fin'; this.notify(`Fin de la partida: ${this.END_YEAR}`, `Hemos llegado a ${this.END_YEAR}. Hora de hacer balance de toda la historia de ${co.name}.`, 'decision', { sourceId: 'gameend', options: ['Ver la puntuación final'] }); }
     if (d.year === 31 && d.month === 1 && d.week === 1 && !co.flags.endShown) { co.flags.endShown = true; this.notify('30 años de óptica', `Han pasado treinta años desde aquel puesto del mercado de ${co.startYear}. Es hora de hacer balance (la partida puede seguir hasta 2076).`, 'decision', { sourceId: 'gameend', options: ['Ver el balance (la partida sigue)'] }); }
     this.randomEvents(w);
@@ -868,20 +868,36 @@ const G = {
     this.modalOpen = true; this.paused = true; this.emit('notification', n);
   },
   /* relevo generacional: el mejor empleado como posible sucesor */
+  /* cada relevo deja una ventaja para siempre (las aplica el módulo epocas: ventas, nota, expectación y coste) */
+  HEIR_PERKS: {
+    familia: 'La clientela de toda la vida sigue fiel a la familia: +4 % de ventas para siempre.',
+    disenador: 'Con alguien de diseño al frente, las colecciones salen más cuidadas: +3 % de nota para siempre.',
+    tecnico: 'Con alguien del taller al frente, se fabrica mejor y más barato: −3 % de coste por montura y +1 % de nota.',
+    labtech: 'Con alguien del laboratorio al frente, se fabrica mejor y más barato: −3 % de coste por montura y +1 % de nota.',
+    optico: 'Con un óptico-optometrista al frente, la parte sanitaria gana prestigio: +8 % de ventas en graduado y lectura.',
+    audioprotesista: 'Con perfil sanitario al frente, la óptica gana prestigio: +8 % de ventas en graduado y lectura.',
+    dependiente: 'Con alguien de mostrador al frente, se vende mejor: +4 % de ventas para siempre.',
+    marketing: 'Con alguien de marketing al frente, cada lanzamiento hace más ruido: +10 % de expectación.',
+    gerencia: 'La gerencia profesional ajusta las compras: −3 % de coste por montura para siempre.'
+  },
+  addHeirPerk(id) { const co = this.company; if (!this.HEIR_PERKS[id]) return; co.flags.heirPerks = (co.flags.heirPerks || []).concat(id); this.notify('Huella de la nueva dirección', this.HEIR_PERKS[id], 'news'); },
   bestHeirEmployee() { const co = this.company; return co.staff.filter(s => s.id !== 0).sort((a, b) => (b.designFactor + b.technologyFactor + (b.experience || 0) / 5000) - (a.designFactor + a.technologyFactor + (a.experience || 0) / 5000))[0] || null; },
   resolveSuccession(choice) {
     const co = this.company; const boss = co.staff[0]; if (!boss) return;
     if (choice === 2) { co.flags.endReason = 'venta'; co.flags.sold = true; this.emit('gameend'); return; }
-    co.flags.generations = (co.flags.generations || 1) + 1;
+    co.flags.generations = (co.flags.generations || 1) + 1; const heir0 = choice === 1 ? this.bestHeirEmployee() : null; const perk = choice === 0 ? 'familia' : heir0 ? heir0.role : 'gerencia';
     const surname = boss.name.split(' ').slice(1).join(' ') || U.pick(DATA.NAMES.last);
     if (choice === 1) { const h = this.bestHeirEmployee();
       if (h) { this.clearResponsibilities(h, true); boss.name = h.name; boss.designFactor = h.designFactor; boss.technologyFactor = h.technologyFactor; boss.speedFactor = h.speedFactor; boss.experience = h.experience; boss.sex = h.sex; boss.look = h.look; boss.skills = Object.assign({}, boss.skills || {}, h.skills || {}); if (h.currentResearch) { if (!boss.currentResearch && boss.state === 'idle') { boss.currentResearch = h.currentResearch; boss.state = h.state; } else { const it = DB.item(h.currentResearch.id); if (it) { co.researchPoints += Research.pointsCost(it); const c = Research.researchCost(it); if (c) co.adjustCash(c, 'Investigación interrumpida (devolución)'); } } } co.staff = co.staff.filter(s => s !== h); this.notify('Nueva dirección', `${h.name} pasa a dirigir ${co.name}. Conoce la casa como nadie: el equipo sigue igual de motivado.`); }
       else { boss.name = U.pick(DATA.NAMES.female) + ' ' + U.pick(DATA.NAMES.last); boss.sex = 'female'; boss.experience = Math.round((boss.experience || 0) * 0.5); this.notify('Nueva dirección', `${boss.name}, gerente de fuera, toma las riendas de ${co.name}.`); }
     } else { const sex = U.rnd() < 0.5 ? 'female' : 'male'; boss.name = U.pick(DATA.NAMES[sex]) + ' ' + surname; boss.sex = sex; boss.experience = Math.round((boss.experience || 0) * 0.6); boss.designFactor = U.clamp(boss.designFactor * (0.85 + 0.3 * U.rnd()), 0.3, 1.5); boss.technologyFactor = U.clamp(boss.technologyFactor * (0.85 + 0.3 * U.rnd()), 0.3, 1.5); co.adjustFans(Math.round(co.fans * 0.03)); this.notify('Nueva generación', `${boss.name} coge el relevo en ${co.name}. Los clientes de toda la vida celebran que la óptica siga en la familia (+3 % de clientes fieles).`); }
+    this.addHeirPerk(perk);
     this.emit('refresh');
   },
   /* se puede «responder siempre así» en las decisiones que se repiten (no en mudanzas, relevo, informes ni avisos del equipo) */
   NO_AUTO: ['level2', 'level3', 'level4', 'relevo', 'report', 'reviews', 'sliders', 'booth', 'hire', 'openDept', 'gameend', 'awards', 'tired'],
+  /* nota todavía sin revelar (se destapa en la ventana de reseñas; por si acaso, a las 4 semanas del lanzamiento) */
+  scoreHidden(g) { return !!(g && g.flags && g.flags.scoreHidden && this.company && this.company.currentWeek < (g.releaseWeek || 0) + 4); },
   canAutoAnswer(n) { return !!(n && n.sourceId && n.options && n.options.length > 1 && !this.NO_AUTO.includes(n.sourceId)); },
   closeNotification(n, choice) {
     this.modalOpen = false; this.shownNotification = null;
@@ -889,7 +905,7 @@ const G = {
       if (n.sourceId === 'level2' && choice === 0) this.moveToLevel(2); if (n.sourceId === 'level3' && choice === 0) this.moveToLevel(3); if (n.sourceId === 'level4' && choice === 0) this.moveToLevel(4);
       if (n.sourceId === 'booth') { this.emit('booth'); return; } if (n.sourceId === 'hire') { this.emit('showCandidates'); return; }
       if (n.sourceId === 'sliders') { this.emit('sliders', n.stage); return; }
-      if (n.sourceId === 'reviews') { this.emit('reviews', n.game); return; }
+      if (n.sourceId === 'reviews') { if (typeof UI === 'undefined' && n.game && n.game.flags) delete n.game.flags.scoreHidden; this.emit('reviews', n.game); return; }
       if (n.sourceId === 'gameend') { this.emit('gameend'); return; }
       if (n.sourceId === 'relevo') { this.resolveSuccession(choice); if (choice === 2) return; }
       if (n.sourceId === 'awards') { this.emit('awards', n.ceremony); return; }
@@ -1018,7 +1034,7 @@ const G = {
     const co = this.company; const g = co.currentGame; const q0 = co.notifications.length; g.state = 'released'; g.releaseWeek = Math.floor(co.currentWeek) + 1;
     for (const s of co.staff) { if (g.flags.staffContribution[s.id]) s.flags.gamesContributed = (s.flags.gamesContributed || 0) + 1; if (s.state === 'working') s.state = 'idle'; }
     this.updateExpertise(g);
-    g.reviews = Reviews.rateGame(co); this.applyXpBonuses(g);
+    g.reviews = Reviews.rateGame(co); this.applyXpBonuses(g); g.flags.scoreHidden = true; /* la nota no se ve hasta la ventana de reseñas */
     let pubOk = null; if (this.currentContract && this.currentContract.type === 'gameContract') { pubOk = g.score >= this.currentContract.minScore; if (pubOk) g.flags.royaltyRate = this.currentContract.royaltyRate; }
     Sales.calculateSales(co, g); co.stats.bestScore = Math.max(co.stats.bestScore, g.score); Modules.call('onRelease', co, g);
     if (co.gameLog.length === 0) { co.researchEnabled = true; co.availableResearch.push('NewTopic', 'CustomEngine'); }

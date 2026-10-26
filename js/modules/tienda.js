@@ -241,13 +241,13 @@
     { id: 'conv', name: 'Conversión visita→compra', base: 0.10, obj: 0.15, exc: 0.20, fmt: pct1 },
     { id: 'capture', name: 'Captura examen→venta', base: 0.60, obj: 0.72, exc: 0.82, fmt: pct, needsGab: true },
     { id: 'ticket', name: 'Ticket medio', base: 210, obj: 260, exc: 350, fmt: v => money(v), scale: 'ticket' },
-    { id: 'upt', name: 'Unidades por ticket', base: 1.2, obj: 1.4, exc: 1.7, fmt: v => v.toFixed(2) },
-    { id: 'p2', name: 'Tasa de segunda gafa', base: 0.10, obj: 0.15, exc: 0.38, fmt: pct },
+    { id: 'upt', minLevel: 2, name: 'Unidades por ticket', base: 1.2, obj: 1.4, exc: 1.7, fmt: v => v.toFixed(2) },
+    { id: 'p2', minLevel: 2, name: 'Tasa de segunda gafa', base: 0.10, obj: 0.15, exc: 0.38, fmt: pct },
     { id: 'attention', name: 'Clientes atendidos (sin esperas)', base: 0.85, obj: 0.95, exc: 1.0, fmt: pct },
-    { id: 'nps', name: 'NPS', base: 30, obj: 50, exc: 70, fmt: v => Math.round(v) },
-    { id: 'margin', name: 'Margen bruto ponderado', base: 0.62, obj: 0.68, exc: 0.74, fmt: pct },
+    { id: 'nps', minLevel: 2, name: 'NPS', base: 30, obj: 50, exc: 70, fmt: v => Math.round(v) },
+    { id: 'margin', minLevel: 2, name: 'Margen bruto ponderado', base: 0.62, obj: 0.68, exc: 0.74, fmt: pct },
     { id: 'rotation', name: 'Rotación de monturas (vueltas/año)', base: 1.1, obj: 1.5, exc: 2.1, fmt: v => v.toFixed(1) },
-    { id: 'lcRetention', name: 'Retención anual de usuarios de lentillas', base: 0.75, obj: 0.88, exc: 0.95, fmt: pct }
+    { id: 'lcRetention', needsGab: true, name: 'Retención anual de usuarios de lentillas', base: 0.75, obj: 0.88, exc: 0.95, fmt: pct }
   ];
 
   /* Noticias programadas (año/mes/semana) → DATA.NEWS si la fecha está libre */
@@ -677,7 +677,7 @@
   }
   function kpiBoxes(co, s, c) {
     const gabOn = !!(gabOf(co) && gabOf(co).tier >= 1);
-    return `<div class="tk">${KPIS.filter(k => !k.needsGab || gabOn).map(k => { const v = c.kpis[k.id]; const cls = kpiClass(k, v, co); const last = s.hist.length >= 2 ? s.hist[s.hist.length - 2] : null; return `<div class="k"><small><span class="sem ${cls}"></span>${esc(k.name)}</small><b class="${cls}">${k.fmt(v)}</b><small>objetivo ${k.fmt(k.scale === 'ticket' ? k.obj * c.L.ticket / 210 : k.scale === 'visits' ? k.obj * c.L.visits / 2600 : k.obj)}</small></div>`; }).join('')}</div>`;
+    return `<div class="tk">${KPIS.filter(k => (!k.needsGab || gabOn) && co.level >= (k.minLevel || 1)).map(k => { const v = c.kpis[k.id]; const cls = kpiClass(k, v, co); const last = s.hist.length >= 2 ? s.hist[s.hist.length - 2] : null; return `<div class="k"><small><span class="sem ${cls}"></span>${esc(k.name)}</small><b class="${cls}">${k.fmt(v)}</b><small>objetivo ${k.fmt(k.scale === 'ticket' ? k.obj * c.L.ticket / 210 : k.scale === 'visits' ? k.obj * c.L.visits / 2600 : k.obj)}</small></div>`; }).join('')}</div>`;
   }
   function uiResumen(co, s, c, w) {
     const L = c.L; const mk = mkOf(co); let h = '';

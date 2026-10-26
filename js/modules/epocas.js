@@ -118,8 +118,11 @@
   const curve = (co, genre, y) => { if (!FUT[genre]) return 1; let v = interp(FUT[genre], y); if (genre === 'lectura' && has(co, 'fut_presbicia_farmaco')) v = 1 - (1 - v) / 2; return v; };
   const partFx = g => { const out = []; for (const id of g.features || []) { const fn = PARTFX[id]; const r = fn && fn(g); if (r) out.push(r); } return out; };
 
+  /* huella de los relevos (G.HEIR_PERKS) */
+  const perks = co => (co.flags && co.flags.heirPerks) || [];
+  const perkSales = (co, g) => { let f = 1; for (const p of perks(co)) { if (p === 'familia' || p === 'dependiente') f *= 1.04; if ((p === 'optico' || p === 'audioprotesista') && (g.genre === 'graduado' || g.genre === 'lectura')) f *= 1.08; } return f; };
   function salesFactor(co, g) {
-    const y = yearOf(co); let f = 1;
+    const y = yearOf(co); let f = perkSales(co, g);
     if (y < 1995) f *= interp(CYCLE, y);
     if (y > 2026 && g) { const a = curve(co, g.genre, y); const b = g.secondGenre ? curve(co, g.secondGenre, y) : a; f *= (2 * a + b) / 3; }
     for (const [id, e] of Object.entries(INNOV)) { if (!has(co, id)) continue; if (e.all) f *= e.all; if (e.genre && e.genre[g.genre]) f *= e.genre[g.genre]; if (e.style && e.style[g.topic]) f *= e.style[g.topic]; if (e.audience && e.audience[g.targetAudience]) f *= e.audience[g.targetAudience]; }
@@ -128,9 +131,9 @@
     if (y >= 2031 && !has(co, 'fut_pasaporte') && !(g.features || []).includes('fut_pasaporte') && (g.platforms || []).some(p => ['megaretail', 'marketplace', 'ecosistema', 'europa'].includes(p))) f *= 0.9;
     return f * fxFor(co, g);
   }
-  function unitCost(co, g) { let pct = 0; for (const [id, e] of Object.entries(INNOV)) if (e.cost && has(co, id)) pct += e.cost; for (const r of partFx(g)) if (r.cost) pct += r.cost; if (S(co).tariffUntil > co.currentWeek) pct += 0.08; return pct * (g.unitPrice || 0); }
-  function scoreFactor(co, g) { let f = 1; for (const [id, e] of Object.entries(INNOV)) if (e.score && has(co, id)) f *= e.score; let pm = 1; for (const r of partFx(g)) if (r.score) pm = Math.max(pm, r.score); return f * pm; /* las tecnologías no se acumulan: cuenta la mejor */ }
-  function hypeFactor(co) { let f = 1; for (const [id, e] of Object.entries(INNOV)) if (e.hype && has(co, id)) f *= e.hype; return f; }
+  function unitCost(co, g) { let pct = 0; for (const p of perks(co)) if (p === 'tecnico' || p === 'labtech' || p === 'gerencia') pct -= 0.03; for (const [id, e] of Object.entries(INNOV)) if (e.cost && has(co, id)) pct += e.cost; for (const r of partFx(g)) if (r.cost) pct += r.cost; if (S(co).tariffUntil > co.currentWeek) pct += 0.08; return pct * (g.unitPrice || 0); }
+  function scoreFactor(co, g) { let f = 1; for (const p of perks(co)) { if (p === 'disenador') f *= 1.03; if (p === 'tecnico' || p === 'labtech') f *= 1.01; } for (const [id, e] of Object.entries(INNOV)) if (e.score && has(co, id)) f *= e.score; let pm = 1; for (const r of partFx(g)) if (r.score) pm = Math.max(pm, r.score); return f * pm; /* las tecnologías no se acumulan: cuenta la mejor */ }
+  function hypeFactor(co) { let f = 1; for (const p of perks(co)) if (p === 'marketing') f *= 1.1; for (const [id, e] of Object.entries(INNOV)) if (e.hype && has(co, id)) f *= e.hype; return f; }
   function monthly(co) {
     let inc = 0, fans = 0;
     for (const [id, e] of Object.entries(INNOV)) { if (!has(co, id)) continue; if (e.inc) inc += e.inc * co.level; if (e.incFans) inc += Math.min(e.incFans * co.fans / 12, 20000 * co.level); if (e.fans) fans += e.fans * co.level; }

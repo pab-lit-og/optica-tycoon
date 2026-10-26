@@ -415,3 +415,4 @@ body { touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
 .spct.low { color: #c0392b; font-weight: 700; }
 .plist .sel.bestfit { box-shadow: 0 0 0 2px #2e8b57 inset; }
 .plist .sel.bestfit b::after { content: " ★ mejor encaje"; color: #2e8b57; font-size: 11px; font-weight: 600; }
+.score.pending { background: #bbb; color: #fff; letter-spacing: 1px; }
