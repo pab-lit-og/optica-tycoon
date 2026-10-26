@@ -407,3 +407,6 @@ body { touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
 .kpi-ok, .kmark.good { color: #1b7a0e; }
 .adv.top::before { color: #8a4a06; }
 :focus-visible { outline-color: #b85c00; }
+
+/* pasar la partida a otro aparato */
+#tCode { width: 100%; box-sizing: border-box; margin-top: 8px; font: 12px ui-monospace, Menlo, Consolas, monospace; border: 2px solid var(--panel-border); border-radius: 6px; padding: 6px; }

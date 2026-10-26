@@ -172,7 +172,10 @@ class Character {
     if (this.flags.onFire && this.flags.onFire <= gameTime) this.flags.onFire = 0;
     const co = G.company; let recharge = true;
     if (this.id !== 0 && this.state !== 'vacation' && this.flags.nextVacation && this.flags.nextVacation < gameTime) {
-      if (!this.flags.needsVacation) { this.flags.needsVacation = true; const q = co.notifications.find(n => n.sourceId === 'tired'); if (q) { if (!q.staffIds.includes(this.id)) q.staffIds.push(this.id); q.text = G.tiredText(q.staffIds); } else G.notify('Personal agotado', G.tiredText([this.id]), 'decision', { sourceId: 'tired', staffIds: [this.id], options: ['Mandar de vacaciones', 'Más tarde'] }); }
+      if (!this.flags.needsVacation && co.flags.autoVacation) this.flags.needsVacation = true; /* con vacaciones automáticas no se avisa */
+      if (!this.flags.needsVacation) { this.flags.needsVacation = true; const q = co.notifications.find(n => n.sourceId === 'tired'); if (q) { if (!q.staffIds.includes(this.id)) q.staffIds.push(this.id); q.text = G.tiredText(q.staffIds); } else G.notify('Personal agotado', G.tiredText([this.id]), 'decision', { sourceId: 'tired', staffIds: [this.id], options: ['Mandar de vacaciones', 'Más tarde', 'Siempre automático'] }); }
+      /* vacaciones automáticas: entre colecciones (o, si está en un departamento, en cuanto quede libre) */
+      if (co.flags.autoVacation && this.flags.needsVacation && !this.currentResearch && (this.state === 'idle' || (this.state === 'working' && this.assignment)) && (!co.currentGame || this.assignment)) { const tr = DB.training('vacaciones'); if (tr && G.startTraining(this, tr)) { G.log(`${this.name} se va de vacaciones (automáticas).`); return; } }
       this.adjustEfficiency(-dt / C.EFFICIENCY_RECHARGE_DURATION); recharge = false;
     }
     if (this.efficiency !== 1 && recharge) this.adjustEfficiency(dt / C.EFFICIENCY_RECHARGE_DURATION);
@@ -389,6 +392,7 @@ const Reviews = {
     if (topicW <= 0.6) neg.push(`${tName} y ${gName} es una combinación terrible.`); else if (topicW === 1) pos.push(`${tName} y ${gName} es una combinación genial.`);
     const last = co.gameLog[co.gameLog.length - 1];
     if (last && last.genre === g.genre && last.secondGenre === g.secondGenre && last.topic === g.topic) { t += 1; neg.push(`¿Otra colección ${gName} de estilo ${tName}?`); g.flags.sameGenreTopic = true; s += -0.4; }
+    else { const near = co.gameLog.slice(-4, -1).reverse().find(x => x.topic === g.topic && x.genre === g.genre && (x.secondGenre || null) === (g.secondGenre || null)); if (near) { t += 1; neg.push(`Se parece mucho a ${near.title}: se nota que vamos alternando las mismas ideas.`); g.flags.nearRepeat = true; s += -0.2; } }
     const plats = g.platforms.map(DB.platform); const pw = W.platformGenre(plats, g.genre, g.secondGenre);
     if (pw <= 0.6) neg.push(`Las colecciones ${gName} no funcionan bien en ${plats[0].name}.`); else if (pw > 1) pos.push(`Las colecciones ${gName} funcionan muy bien en ${plats[0].name}.`);
     const aw = W.audience(DB.topic(g.topic).aw, g.targetAudience); if (aw <= 0.6) neg.push(`${tName} es un estilo horrible para el público «${DATA.AUDIENCES.find(a => a.id === g.targetAudience).name}».`);
@@ -577,6 +581,7 @@ class Company {
   /* repara partidas antiguas: rellena los campos nuevos con valores por defecto */
   repair() {
     if (!this.startYear || !Number.isFinite(+this.startYear)) this.startYear = 1995;
+    if (Array.isArray(this.topicOrder)) { const miss = DATA.TOPICS.map(t => t.id).filter(id => !this.topicOrder.includes(id)); for (const id of miss) this.topicOrder.splice(Math.floor(U.rnd() * (this.topicOrder.length + 1)), 0, id); }
     for (const [k, v] of [['cash', 0], ['fans', 0], ['researchPoints', 0], ['currentWeek', 0]]) if (!Number.isFinite(this[k])) this[k] = v;
     this.level = U.clamp(Math.round(+this.level) || 1, 1, C.LEVELS.length - 1);
     for (const k of ['notifications', 'gameLog', 'engines', 'licencedPlatforms', 'topics', 'researchCompleted', 'availableResearch', 'scheduledShown', 'cashLog']) if (!Array.isArray(this[k])) this[k] = [];
@@ -768,9 +773,9 @@ const G = {
     const co = this.company; if (w % 4 !== 2 || U.rnd() > 0.12) return; const r = U.rnd();
     /* cada evento avisa a los módulos con Modules.call('onEvent', co, id, datos) — ids: press, theft, celebrity, inspection, supplierDelay */
     if (r < 0.25 && co.currentGame) { const h = 8 + Math.floor(12 * U.rnd()); co.currentGame.hypePoints += h; this.notify('Prensa local', `Un periódico local ha publicado un reportaje sobre tu óptica. La colección en desarrollo gana ${h} puntos de expectación.`, 'news'); Modules.call('onEvent', co, 'press', { hype: h }); }
-    else if (r < 0.45) { const loss = Math.floor(2000 + U.rnd() * 6000 * co.level); co.adjustCash(-loss, 'Robo en tienda'); this.notify('Robo', `Han entrado en la tienda de noche y se han llevado monturas del escaparate. Pérdidas: ${U.money(loss)}.`); Modules.call('onEvent', co, 'theft', { loss }); }
+    else if (r < 0.45) { const loss = this.scaledCost(2000 + U.rnd() * 6000 * co.level, co); co.adjustCash(-loss, 'Robo en tienda'); this.notify('Robo', `Han entrado en la tienda de noche y se han llevado monturas del escaparate. Pérdidas: ${U.money(loss)}.`); Modules.call('onEvent', co, 'theft', { loss }); }
     else if (r < 0.65 && co.fans > 0) { const f = Math.floor(co.fans * 0.04 + 200); co.adjustFans(f); this.notify('Cliente famoso', `Una presentadora de televisión ha aparecido en antena con tus gafas. Ganamos ${U.num(f)} clientes fieles.`, 'news'); Modules.call('onEvent', co, 'celebrity', { fans: f }); }
-    else if (r < 0.8 && co.level >= 3 && co.hasResearch('Gabinete')) { const fine = 3000 + Math.floor(U.rnd() * 5000); co.adjustCash(-fine, 'Inspección'); this.notify('Inspección de Sanidad', `Inspección rutinaria del gabinete: falta documentación de calibración. Multa de ${U.money(fine)}.`); Modules.call('onEvent', co, 'inspection', { fine }); }
+    else if (r < 0.8 && co.level >= 3 && co.hasResearch('Gabinete')) { const fine = this.scaledCost(3000 + U.rnd() * 5000, co); co.adjustCash(-fine, 'Inspección'); this.notify('Inspección de Sanidad', `Inspección rutinaria del gabinete: falta documentación de calibración. Multa de ${U.money(fine)}.`); Modules.call('onEvent', co, 'inspection', { fine }); }
     else if (co.currentGame && this.currentFeature && this.currentFeature.type === 'mission') { this.currentFeature.startTime += 2 * WEEK_MS; this.currentFeature.delayUntil = this.gameTime + 2 * WEEK_MS; this.notify('Proveedor', 'El proveedor de acetato se retrasa dos semanas con la entrega. El desarrollo de la colección se alarga.'); Modules.call('onEvent', co, 'supplierDelay', { weeks: 2 }); }
   },
 
@@ -804,6 +809,9 @@ const G = {
   wearFactor(co, pid) { return Math.max(0.85, 1 / (1 + 0.06 * this.wearOf(co, pid))); },
   decayWear(co) { if (!co.chanWear) return; for (const k of Object.keys(co.chanWear)) { co.chanWear[k] *= 0.85; if (co.chanWear[k] < 0.05) delete co.chanWear[k]; } },
   /* consultoría de I+D: convierte dinero en puntos de investigación, cada compra un 35 % más cara (desde la óptica con gabinete) */
+  /* los sucesos con coste fijo se encarecen con el tamaño de la óptica (una multa de 3.000 € no se nota en una red de ópticas) */
+  costScale(co) { co = co || this.company; if (!co) return 1; const l = co.level; return l <= 2 ? 1 : l === 3 ? 1.5 : Math.min(5, 2.5 * (1 + 0.15 * (co.branches || 0))); },
+  scaledCost(base, co) { const v = base * this.costScale(co); return v >= 10000 ? Math.round(v / 1000) * 1000 : Math.round(v / 100) * 100; },
   rpCost(co) { return Math.round(60000 * Math.pow(1.35, (co.flags && co.flags.rpBought) || 0)); },
   buyResearchPoints() { const co = this.company; if (!co || co.level < 3) return false; const c = this.rpCost(co); if (!this.canSpend(c)) return false; co.adjustCash(-c, 'Consultoría de I+D'); co.researchPoints += 25; co.flags.rpBought = (co.flags.rpBought || 0) + 1; this.emit('refresh'); return true; },
   /* red de ópticas (sumidero de dinero en la insignia): cada sucursal cuesta más y rinde algo menos que la anterior */
@@ -854,7 +862,8 @@ const G = {
       if (n.sourceId === 'awards') { this.emit('awards', n.ceremony); return; }
       if (n.sourceId === 'report') { if (choice === 0) { const g = this.company.gameLog.find(x => x.id === n.gameId); const rep = g ? this.generateReport(g) : null; if (rep) { this.emit('report', rep); return; } } }
       if (n.sourceId === 'counterfeit') this.resolveCounterfeit(n.gameId, choice);
-      if (n.sourceId === 'tired' && choice === 0) { const tr = DB.training('vacaciones'); for (const id of n.staffIds || []) { const s = this.company.staff.find(x => x.id === id); if (!s || s.state === 'vacation') continue; if (!tr || !this.startTraining(s, tr)) this.log(`${s.name} no puede irse ahora (${s.state === 'training' ? 'está en formación' : 'está ocupado/a'}); mándalo/a desde su ficha cuando acabe.`); } }
+      if (n.sourceId === 'tired' && choice === 2) { this.company.flags.autoVacation = true; this.log('Vacaciones automáticas activadas: puedes desactivarlas en Personal.'); }
+      if (n.sourceId === 'tired' && (choice === 0 || choice === 2)) { const tr = DB.training('vacaciones'); for (const id of n.staffIds || []) { const s = this.company.staff.find(x => x.id === id); if (!s || s.state === 'vacation') continue; if (!tr || !this.startTraining(s, tr)) this.log(`${s.name} no puede irse ahora (${s.state === 'training' ? 'está en formación' : 'está ocupado/a'}); mándalo/a desde su ficha cuando acabe.`); } }
       if (n.sourceId.includes(':')) Modules.call('onDecision', this.company, n.sourceId, choice, n);
     }
     if (!this.company.notifications.length) this.paused = this.userPaused || false;
@@ -1266,13 +1275,13 @@ const G = {
     const p = U.clamp(0.15 + co.fans / 2e6 + (g.score >= 8 ? 0.1 : 0), 0, 0.6); if (U.rnd() > p) return false;
     g.flags.counterfeit = { rate: Math.round((0.05 + 0.10 * U.rnd()) * 1000) / 1000, decision: null };
     const ryC = co.realYear(); const where = U.pick(['en los mercadillos de la costa', 'en bazares de medio país'].concat(ryC >= 1998 ? ['en una web con dominio exótico'] : ['en tenderetes de las ferias de verano']).concat(ryC >= 2008 ? ['en redes sociales con fotos robadas de nuestro catálogo'] : []));
-    this.notify('Falsificaciones', this.withTip(`Han aparecido copias de ${g.title} ${where}: mismas formas, materiales de pena. Podemos denunciarlo (abogados y aduanas: 20.000 €) para frenar el daño, o mirar para otro lado y asumir que venderemos algo menos.`, 'counterfeit'), 'decision', { sourceId: 'counterfeit', gameId: g.id, options: ['Denunciar (20.000 €)', 'Ignorar'] });
+    this.notify('Falsificaciones', this.withTip(`Han aparecido copias de ${g.title} ${where}: mismas formas, materiales de pena. Podemos denunciarlo (abogados y aduanas: ${U.money(this.scaledCost(20000, co))}) para frenar el daño, o mirar para otro lado y asumir que venderemos algo menos.`, 'counterfeit'), 'decision', { sourceId: 'counterfeit', gameId: g.id, options: ['Denunciar (20.000 €)', 'Ignorar'] });
     Modules.call('onEvent', co, 'counterfeit', { gameId: g.id, rate: g.flags.counterfeit.rate }); return true;
   },
   resolveCounterfeit(gameId, choice) {
     const co = this.company; const g = co.gameLog.find(x => x.id === gameId); if (!g || !g.flags.counterfeit || g.flags.counterfeit.decision) return;
     const cf = g.flags.counterfeit; cf.decision = choice === 0 ? 'denounce' : 'ignore'; let rate = cf.rate;
-    if (choice === 0) { co.adjustCash(-20000, 'Denuncia por falsificaciones'); rate = Math.round(rate / 3 * 1000) / 1000; }
+    if (choice === 0) { co.adjustCash(-this.scaledCost(20000, co), 'Denuncia por falsificaciones'); rate = Math.round(rate / 3 * 1000) / 1000; }
     cf.applied = rate; const rem = Math.max(0, (g.totalSalesCash || 0) - (g.currentSalesCash || 0)); g.totalSalesCash -= rem * rate;
     if (choice === 0) { const seized = Math.floor(1000 + 9000 * U.rnd()); this.log(`Aduanas incauta ${U.num(seized)} copias de ${g.title}. Las ventas apenas se resienten (−${Math.round(rate * 100)} %).`); if (U.rnd() < 0.5) co.adjustFans(Math.floor(200 + co.fans * 0.005)); }
     else this.log(`Las copias de ${g.title} campan a sus anchas: ventas −${Math.round(rate * 100)} % mientras esté en el mercado.`);
