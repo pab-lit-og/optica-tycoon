@@ -410,3 +410,8 @@ body { touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
 
 /* pasar la partida a otro aparato */
 #tCode { width: 100%; box-sizing: border-box; margin-top: 8px; font: 12px ui-monospace, Menlo, Consolas, monospace; border: 2px solid var(--panel-border); border-radius: 6px; padding: 6px; }
+.autoans { display: flex; align-items: center; gap: 8px; margin-top: 10px; font-size: 13px; color: var(--muted); }
+.autoans input { width: 20px; height: 20px; }
+.spct.low { color: #c0392b; font-weight: 700; }
+.plist .sel.bestfit { box-shadow: 0 0 0 2px #2e8b57 inset; }
+.plist .sel.bestfit b::after { content: " ★ mejor encaje"; color: #2e8b57; font-size: 11px; font-weight: 600; }

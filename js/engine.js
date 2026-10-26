@@ -179,7 +179,7 @@ class Character {
       this.adjustEfficiency(-dt / C.EFFICIENCY_RECHARGE_DURATION); recharge = false;
     }
     if (this.efficiency !== 1 && recharge) this.adjustEfficiency(dt / C.EFFICIENCY_RECHARGE_DURATION);
-    if (this.state === 'vacation') { if (gameTime >= this.vacationEnd) { this.state = 'idle'; this.efficiency = 1; G.notify('Personal', `${this.name} ha vuelto de vacaciones con las pilas cargadas.`, 'news'); } return; }
+    if (this.state === 'vacation') { if (gameTime >= this.vacationEnd) { this.state = 'idle'; this.efficiency = 1; if (co.flags.autoVacation) G.log(`${this.name} ha vuelto de vacaciones.`); else G.notify('Personal', `${this.name} ha vuelto de vacaciones con las pilas cargadas.`, 'news'); } return; }
     if (this.state === 'training') { this._doTraining(dt); return; }
     if (this.state === 'researching') { this._doResearch(dt); return; }
     /* como GDT: quien se queda libre (vuelve de vacaciones, termina una investigación) se reincorpora al proyecto en marcha */
@@ -641,7 +641,19 @@ const ACHIEVEMENTS = [
   { id: 'equipo', icon: '👥', name: 'Plantilla completa', desc: 'Llena la plantilla de la óptica insignia', test: co => co.level >= 4 && co.staff.length >= co.maxStaff },
   { id: 'sabio', icon: '🔬', name: 'Siempre investigando', desc: 'Completa 40 investigaciones', test: co => (co.researchCompleted || []).length >= 40 },
   { id: 'decada', icon: '📅', name: 'Diez años abiertos', desc: 'Sigue en el negocio diez años', test: co => co.getCurrentDate().year >= 11 },
-  { id: 'treinta', icon: '🎂', name: 'Treinta años de óptica', desc: 'Sigue en el negocio treinta años', test: co => co.getCurrentDate().year >= 31 }
+  { id: 'treinta', icon: '🎂', name: 'Treinta años de óptica', desc: 'Sigue en el negocio treinta años', test: co => co.getCurrentDate().year >= 31 },
+  { id: 'cincuenta', icon: '🥇', name: 'Bodas de oro', desc: 'Sigue en el negocio cincuenta años', test: co => co.getCurrentDate().year >= 51 },
+  { id: 'idlab', icon: '🧪', name: 'Laboratorio I+D', desc: 'Monta el laboratorio de I+D', test: co => co.hasResearch('RnDLab') },
+  { id: 'grandes3', icon: '🚀', name: 'Proyectos de futuro', desc: 'Termina 3 proyectos del Laboratorio I+D', test: co => ['OwnLensBrand', 'GafaPropia', 'OwnTryOn', 'OwnFrameBrand', 'Subscription'].filter(id => co.hasResearch(id)).length >= 3 },
+  { id: 'red6', icon: '🗺️', name: 'Red gallega', desc: 'Abre 6 sucursales', test: co => (co.branches || 0) >= 6 },
+  { id: 'red12', icon: '🌍', name: 'Cadena completa', desc: 'Abre las 12 sucursales', test: co => (co.branches || 0) >= 12 },
+  { id: 'relevo', icon: '👪', name: 'Segunda generación', desc: 'Pasa la óptica a otra generación', test: co => (co.flags.generations || 1) >= 2 },
+  { id: 'relevo3', icon: '🌳', name: 'Saga familiar', desc: 'Tres generaciones al frente de la óptica', test: co => (co.flags.generations || 1) >= 3 },
+  { id: 'milmillones', icon: '🏦', name: 'Mil millones', desc: '1.000 M€ de ingresos acumulados', test: co => co.stats.totalRevenue >= 1e9 },
+  { id: 'fieles10m', icon: '💞', name: 'Diez millones de fieles', desc: 'Llega a 10 millones de clientes fieles', test: co => co.fans >= 1e7 },
+  { id: 'col100', icon: '🏛️', name: 'Centenario de colecciones', desc: 'Lanza 100 colecciones', test: co => co.gameLog.length >= 100 },
+  { id: 'decadas', icon: '🕰️', name: 'Prismas de tres décadas', desc: 'Gana Prismas de Oro en tres décadas distintas', test: co => new Set(co.awards.map(a => Math.floor(U.realYear(a.year) / 10))).size >= 3 },
+  { id: 'fin2076', icon: '🏁', name: 'Hasta 2076', desc: 'Llega al final de la partida', test: co => co.realYear() >= 2076 }
 ];
 
 const G = {
@@ -672,6 +684,7 @@ const G = {
       /* y que el mercado gratuito del principio (tienda + mercadillos) sea al menos el 40 % del de 1995: sin eso, 1985 y 2026 llevaban a la quiebra */
       const free = sh => { const save = co.startYear; co.startYear = sh; const t = Platforms.existing(0).filter(p => co.licencedPlatforms.includes(p.id)).reduce((s, p) => s + Platforms.rawMarketSize(p, 0), 0); co.startYear = save; return t; };
       const f95 = free(1995), f0 = free(co.startYear); co.marketScale = Math.max(t0 > t95 ? t95 / t0 : 1, f0 > 0 ? Math.min(3, 0.4 * f95 / f0) : 1); if (co.startYear === 1995) co.marketScale = 1; }
+    { const co = this.company; co.knowledge = co.knowledge || {}; co.knowledge._combos = co.knowledge._combos || {}; for (const t of co.topics.slice(0, 3)) { const tp = DB.topic(t); let bi = tp.gw[0] >= tp.gw[4] ? 0 : 4; co.knowledge._combos[t + '|' + DATA.GENRES[bi].id] = tp.gw[bi]; } } /* el consejo de bienvenida cuenta como encaje ya conocido */
     const sy = this.company.startYear; this.notify('Bienvenido', DATA.NEWS[0].text.replace('Es 1995.', `Es ${sy}.`).replace('70.000 € ahorrados', sy < 1995 ? 'unos ahorros equivalentes a 70.000 € de hoy' : '70.000 € ahorrados').replace(/\(Aviador[^)]*\)/, '(' + this.company.topics.slice(0, 3).map(t => { const tp = DB.topic(t); const okG = [0, 4]; let bi = tp.gw[0] >= tp.gw[4] ? 0 : 4; okG.forEach(i => { if (tp.gw[i] > tp.gw[bi]) bi = i; }); return tp.name + ' → ' + DATA.GENRES[bi].name; }).join(', ') + ')') + (G.ERA_INTRO[sy] ? ' ' + G.ERA_INTRO[sy] : '')); this.company.scheduledShown.push('1/1/1');
     this.emit('newgame'); this.emit('refresh');
   },
@@ -703,7 +716,7 @@ const G = {
     this.offerReports(w); this.checkBoosts(w);
     for (const g of co.gameLog) if (g.flags && g.flags.cfWeek && w >= g.flags.cfWeek) { delete g.flags.cfWeek; if (!g.soldOut) this.checkCounterfeit(g); }
     Modules.call('weekly', co, w, d);
-    if (d.week === 1) { const b = General.monthlyCosts(co); co.adjustCash(-b, 'Gastos mensuales'); if (co.currentGame) co.currentGame.costs += b; if (!Modules.get('gabinete')) this.gabineteIncome(); this.subscriptionIncome(); Modules.call('monthly', co, d); this.decayWear(co); if (co.branches) co.adjustCash(this.branchesNet(co), 'Red de sucursales'); }
+    if (d.week === 1) { const b = General.monthlyCosts(co); co.adjustCash(-b, 'Gastos mensuales'); if (co.currentGame) co.currentGame.costs += b; if (!Modules.get('gabinete')) this.gabineteIncome(); this.subscriptionIncome(); Modules.call('monthly', co, d); this.decayWear(co); if (co.branches) co.adjustCash(this.branchesNet(co), 'Red de sucursales'); if (co.hasResearch('RnDLab')) co.researchPoints += 10 + 2 * (co.branches || 0); /* el laboratorio de I+D produce investigación */ }
     if (d.month === 1 && d.week === 1 && d.year > 1) { const ry = U.realYear(d.year); const nuevos = DATA.TOPICS.filter(t => t.year === ry); if (nuevos.length) this.log(`🆕 Nuevos estilos en el mercado (${ry}): ${nuevos.map(t => t.name).join(', ')}. Ya se pueden investigar.`); }
     Trends.update(co);
     if (co.startYear !== 1995 && d.week === 1) { if (!co.flags.targetAudienceStory && co.playedAtLeast(2, 6)) { co.flags.targetAudienceStory = true; this.notify('Público objetivo', 'Los estudios de mercado empiezan a segmentar las ventas de gafas por edades. Investigar «Público objetivo» permitiría orientar mejor cada colección.'); } if (!co.flags.marketingStory && co.playedAtLeast(3, 4)) { co.flags.marketingStory = true; this.notify('Publicidad', 'Las revistas de moda lanzan secciones de óptica. Investigar «Marketing» permitiría anunciar las colecciones antes de su lanzamiento.'); } }
@@ -713,10 +726,10 @@ const G = {
     for (const n of DATA.NEWS) { if (n.classic && co.startYear !== 1995) continue; if (U.weekFromDate(n.date) === U.absWeek(w) && !co.scheduledShown.includes(n.date)) { co.scheduledShown.push(n.date); if (n.flag) co.flags[n.flag] = true; this.notify(n.title, n.text, 'news'); } }
     if (this.hireSearch && w >= this.hireSearch.targetWeek && !this.candidates) { this.candidates = this.generateApplicants(this.hireSearch); this.notify('Candidatos', `Han llegado ${this.candidates.length} candidaturas para el puesto. Revísalas en el menú de personal.`, 'decision', { sourceId: 'hire' }); }
     if (this.currentContract && this.currentContract.type === 'generic' && w >= this.currentContract.deadlineWeek) this.finishContract(false);
-    if (d.month === 1 && d.week === 1 && d.year > 1) this.yearlyAwards(d.year - 1);
+    if (d.month === 1 && d.week === 1 && d.year > 1) { this.yearlyAwards(d.year - 1); this.yearlyRecap(d.year - 1); }
     if (d.month === 1 && d.week === 1 && (d.year === 36 || d.year === 71 || d.year === 106) && !co.flags['relevo' + d.year]) { co.flags['relevo' + d.year] = true; const best = this.bestHeirEmployee(); this.notify('Relevo generacional', `Han pasado ${d.year - 1} años desde que se abrió el puesto del mercado. Toca decidir quién lleva la óptica a partir de ahora.`, 'decision', { sourceId: 'relevo', options: ['Lo coge mi hija o mi hijo (talento parecido, menos experiencia, +3 % de clientes fieles)', best ? `Se la dejo a ${best.name} (ocupa tu puesto con su talento y deja una plaza libre)` : 'Busco un gerente de fuera (menos experiencia)', 'Vender la óptica y retirarme (fin de la partida: el patrimonio suma a la puntuación)'] }); }
     if (d.month === 1 && d.week === 1 && co.realYear() >= this.END_YEAR && !co.flags.end2076) { co.flags.end2076 = true; co.flags.endReason = 'fin'; this.notify(`Fin de la partida: ${this.END_YEAR}`, `Hemos llegado a ${this.END_YEAR}. Hora de hacer balance de toda la historia de ${co.name}.`, 'decision', { sourceId: 'gameend', options: ['Ver la puntuación final'] }); }
-    if (d.year === 31 && d.month === 1 && d.week === 1 && !co.flags.endShown) { co.flags.endShown = true; this.notify('30 años de óptica', `Han pasado treinta años desde aquel puesto del mercado de ${co.startYear}. Es hora de hacer balance (la partida puede seguir hasta 2076).`, 'decision', { sourceId: 'gameend', options: ['Ver la puntuación final'] }); }
+    if (d.year === 31 && d.month === 1 && d.week === 1 && !co.flags.endShown) { co.flags.endShown = true; this.notify('30 años de óptica', `Han pasado treinta años desde aquel puesto del mercado de ${co.startYear}. Es hora de hacer balance (la partida puede seguir hasta 2076).`, 'decision', { sourceId: 'gameend', options: ['Ver el balance (la partida sigue)'] }); }
     this.randomEvents(w);
     this.checkAchievements();
     /* autoguardado al final de la semana (después de relevo, fin de partida y eventos) */
@@ -746,6 +759,15 @@ const G = {
     if (cat === 'public') return g.score * 0.6 + 4 * U.clamp(Math.log10(1 + (g.unitsSold || 0)) / 6, 0, 1);
     return g.score;
   },
+  /* foto de cada año (gráfica del final) y un balance que no detiene el juego */
+  yearlyRecap(year) {
+    const co = this.company; const Y = co.stats.yearly = Array.isArray(co.stats.yearly) ? co.stats.yearly : []; const prev = Y[Y.length - 1];
+    const gs = co.gameLog.filter(g => g.releaseWeek !== undefined && U.dateFromWeek(g.releaseWeek).year === year); const best = gs.reduce((m, g) => Math.max(m, g.score || 0), 0); const aw = co.awards.filter(a => a.year === year).length;
+    const rec = { y: U.realYear(year), cash: Math.round(co.cash), fans: Math.round(co.fans), totRev: Math.round(co.stats.totalRevenue), rev: prev || year === 1 ? Math.round(co.stats.totalRevenue - (prev ? prev.totRev : 0)) : null, best: Math.round(best * 10) / 10, n: gs.length, aw };
+    Y.push(rec); if (Y.length > 120) Y.shift(); if (rec.rev === null) return; /* partida guardada antes de existir el balance */
+    const dv = prev && prev.rev > 0 ? Math.round((rec.rev / prev.rev - 1) * 100) : null;
+    this.notify(`Balance de ${rec.y}`, `Ingresos ${U.shortMoney(rec.rev)}${dv !== null ? ` (${dv >= 0 ? '+' : ''}${dv} % frente a ${rec.y - 1})` : ''} · caja ${U.shortMoney(rec.cash)} · ${U.num(rec.fans)} clientes fieles · ${gs.length} colección${gs.length === 1 ? '' : 'es'}${best ? `, mejor nota ${best.toFixed(1).replace('.', ',')}` : ''}${aw ? ` · ${aw} Prisma${aw > 1 ? 's' : ''} de Oro` : ''}.`, 'news');
+  },
   yearlyAwards(year) {
     const co = this.company; const games = co.gameLog.filter(g => U.dateFromWeek(g.releaseWeek).year === year); if (!games.length) return null;
     const firstTopicYear = {}; for (const g of co.gameLog) { if (firstTopicYear[g.topic] === undefined) firstTopicYear[g.topic] = U.dateFromWeek(g.releaseWeek).year; }
@@ -754,7 +776,7 @@ const G = {
     for (const cat of this.AWARD_CATEGORIES) {
       let pool = games.filter(g => g.score >= 6); if (cat.id === 'newstyle') pool = pool.filter(g => firstTopicYear[g.topic] === year);
       const ours = pool.map(g => ({ title: g.title, by: co.name, gameId: g.id, strength: this.awardStrength(cat.id, g), score: g.score, ours: true })).sort((a, b) => b.strength - a.strength).slice(0, 1);
-      const rivals = []; for (let i = 0; i < 3; i++) { const s = U.clamp(6.8 + 2.3 * U.rnd() + 0.025 * year, 6, 9.9); rivals.push({ title: cols[(ni + i) % cols.length], by: names[(ni + i) % names.length], strength: s, score: s, ours: false }); } ni += 3;
+      const rivals = []; for (let i = 0; i < 3; i++) { const s = U.clamp(6.8 + 2.3 * U.rnd() + 0.025 * Math.min(year, 30), 6, 9.9); rivals.push({ title: cols[(ni + i) % cols.length], by: names[(ni + i) % names.length], strength: s, score: s, ours: false }); } ni += 3;
       const nominees = ours.concat(rivals).sort((a, b) => b.strength - a.strength).slice(0, 3);
       const winner = nominees[0]; const entry = { id: cat.id, name: cat.name, icon: cat.icon, desc: cat.desc, nominees, winner, ours: !!winner.ours, nominated: ours.length > 0 };
       ceremony.categories.push(entry);
@@ -801,7 +823,7 @@ const G = {
     const def = { 2: { cost: 150000, cash: 350000, staff: 1, games: 1, title: '¿Nuevo local?', text: 'Un local comercial en el centro nos permitiría contratar personal, investigar colecciones medianas y abrir tienda de verdad. Ojo: los gastos fijos suben de 6.000 a 32.000 €/mes, así que conviene encadenar colecciones y usar la tienda y el gabinete.' },
       3: { cost: 150000, cash: 400000, staff: 2, games: 4, title: 'Reforma del local', text: 'El equipo propone reformar el local para montar un gabinete optométrico, taller y laboratorio.' },
       4: { cost: 4000000, cash: 5000000, staff: 4, games: 10, title: 'Óptica insignia', text: 'Ha llegado el momento de dar el salto: una óptica insignia con laboratorio propio y espacio para más personal. Los gastos fijos suben a 64.000 €/mes.' } }[l];
-    const reasons = []; if (co.cash < def.cash) reasons.push(`caja mínima ${U.money(def.cash)} (tienes ${U.money(co.cash)})`); if (co.staff.length < def.staff) reasons.push(`${def.staff} persona${def.staff > 1 ? 's' : ''} en plantilla`); if (co.gameLog.length < def.games) reasons.push(`${def.games} colecciones lanzadas (llevas ${co.gameLog.length})`); if (!this.isIdle()) reasons.push('ningún proyecto en marcha');
+    const reasons = []; if (co.cash < def.cash) reasons.push(`caja mínima ${U.money(def.cash)} (tienes ${U.money(co.cash)})`); if (co.staff.length < def.staff) reasons.push(`${def.staff} persona${def.staff > 1 ? 's' : ''} en plantilla`); if (co.gameLog.length < def.games) reasons.push(`${def.games} colecci${def.games === 1 ? 'ón lanzada' : 'ones lanzadas'} (llevas ${co.gameLog.length})`); if (!this.isIdle()) reasons.push('terminar el proyecto en marcha');
     return Object.assign({ level: l, name: C.LEVELS[l].name, ok: reasons.length === 0, reasons }, def);
   },
   /* desgaste por canal: cada lanzamiento suma 1 al canal y se recupera un 15 % cada mes; las ventas se dividen entre (1 + 0,06·desgaste), mínimo ×0,85 */
@@ -811,8 +833,12 @@ const G = {
   /* consultoría de I+D: convierte dinero en puntos de investigación, cada compra un 35 % más cara (desde la óptica con gabinete) */
   /* los sucesos con coste fijo se encarecen con el tamaño de la óptica (una multa de 3.000 € no se nota en una red de ópticas) */
   costScale(co) { co = co || this.company; if (!co) return 1; const l = co.level; return l <= 2 ? 1 : l === 3 ? 1.5 : Math.min(5, 2.5 * (1 + 0.15 * (co.branches || 0))); },
+  /* averías: la mitad de la subida (un técnico urgente para una red de ópticas cuesta más, pero la pieza es la misma) */
+  repairCost(base, co) { const v = base * (1 + (this.costScale(co) - 1) * 0.5); return v >= 10000 ? Math.round(v / 1000) * 1000 : Math.round(v / 10) * 10; },
+  /* cambia los importes «N.NNN €» de un texto por su valor escalado (para avisos con el precio escrito) */
+  scaleMoneyText(t, co) { return this.costScale(co) === 1 ? t : String(t).replace(/(\d{1,3}(?:\.\d{3})+|\d+) €/g, (m, n) => U.money(this.scaledCost(+n.replace(/\./g, ''), co))); },
   scaledCost(base, co) { const v = base * this.costScale(co); return v >= 10000 ? Math.round(v / 1000) * 1000 : Math.round(v / 100) * 100; },
-  rpCost(co) { return Math.round(60000 * Math.pow(1.35, (co.flags && co.flags.rpBought) || 0)); },
+  rpCost(co) { return Math.round(60000 * this.costScale(co) * Math.pow(1.15, (co.flags && co.flags.rpBought) || 0) / 1000) * 1000; },
   buyResearchPoints() { const co = this.company; if (!co || co.level < 3) return false; const c = this.rpCost(co); if (!this.canSpend(c)) return false; co.adjustCash(-c, 'Consultoría de I+D'); co.researchPoints += 25; co.flags.rpBought = (co.flags.rpBought || 0) + 1; this.emit('refresh'); return true; },
   /* red de ópticas (sumidero de dinero en la insignia): cada sucursal cuesta más y rinde algo menos que la anterior */
   BRANCH_MAX: 12,
@@ -829,10 +855,13 @@ const G = {
 
   /* ---------- notificaciones ---------- */
   notify(header, text, type, opts) { if (type === 'sales') { this.log(`${header}: ${text}`); return; } this.company.notifications.push(Object.assign({ id: U.guid(), header, text, type: type || 'popup', weeksUntilFired: 0, atWeek: this.company.currentWeek }, opts || {})); },
-  log(text) { this.unreadLog.push({ week: Math.floor(this.company.currentWeek), text }); if (this.unreadLog.length > 60) this.unreadLog.shift(); this.emit('log'); },
+  log(text) { this.unreadLog.push({ week: Math.floor(this.company.currentWeek), text }); if (this.unreadLog.length > 150) this.unreadLog.shift(); this.emit('log'); },
   showPendingNotifications() {
     const co = this.company; if (!co.notifications.length || this.modalOpen) return;
-    const n = co.notifications.shift(); if (n.type !== 'sales' && n.sourceId !== 'sliders') this.shownNotification = n; if (n.type === 'news' || n.type === 'sales') { this.log(`${n.header}: ${n.text}`); if (n.type === 'news') { if (this.shownNotification === n) this.shownNotification = null; this.emit('newsBanner', n); }
+    const n = co.notifications.shift();
+    /* decisiones que el jugador pidió responder siempre igual: se aplican solas y quedan en el registro */
+    if (n.type === 'decision' && n.sourceId && n.options && this.canAutoAnswer(n)) { co.flags.seenDecision = co.flags.seenDecision || {}; co.flags.seenDecision[n.sourceId] = (co.flags.seenDecision[n.sourceId] || 0) + 1; const aa = co.flags.autoAnswer && co.flags.autoAnswer[n.sourceId]; if (Number.isInteger(aa) && aa >= 0 && aa < n.options.length) { this.log(`${n.header}: respuesta automática «${n.options[aa]}».`); this.closeNotification(n, aa); if (!this.modalOpen && !co.notifications.length) this.paused = this.userPaused || false; return; } }
+    if (n.type !== 'sales' && n.sourceId !== 'sliders') this.shownNotification = n; if (n.type === 'news' || n.type === 'sales') { this.log(`${n.header}: ${n.text}`); if (n.type === 'news') { if (this.shownNotification === n) this.shownNotification = null; this.emit('newsBanner', n); }
       if (n.type === 'sales' && this.shownNotification === n) this.shownNotification = null;
       /* sin ventana abierta y sin más avisos: el juego no puede quedarse en pausa por un aviso que no abre ventana */
       if (!this.modalOpen && !co.notifications.length) this.paused = this.userPaused || false; return; }
@@ -843,6 +872,7 @@ const G = {
   resolveSuccession(choice) {
     const co = this.company; const boss = co.staff[0]; if (!boss) return;
     if (choice === 2) { co.flags.endReason = 'venta'; co.flags.sold = true; this.emit('gameend'); return; }
+    co.flags.generations = (co.flags.generations || 1) + 1;
     const surname = boss.name.split(' ').slice(1).join(' ') || U.pick(DATA.NAMES.last);
     if (choice === 1) { const h = this.bestHeirEmployee();
       if (h) { this.clearResponsibilities(h, true); boss.name = h.name; boss.designFactor = h.designFactor; boss.technologyFactor = h.technologyFactor; boss.speedFactor = h.speedFactor; boss.experience = h.experience; boss.sex = h.sex; boss.look = h.look; boss.skills = Object.assign({}, boss.skills || {}, h.skills || {}); if (h.currentResearch) { if (!boss.currentResearch && boss.state === 'idle') { boss.currentResearch = h.currentResearch; boss.state = h.state; } else { const it = DB.item(h.currentResearch.id); if (it) { co.researchPoints += Research.pointsCost(it); const c = Research.researchCost(it); if (c) co.adjustCash(c, 'Investigación interrumpida (devolución)'); } } } co.staff = co.staff.filter(s => s !== h); this.notify('Nueva dirección', `${h.name} pasa a dirigir ${co.name}. Conoce la casa como nadie: el equipo sigue igual de motivado.`); }
@@ -850,6 +880,9 @@ const G = {
     } else { const sex = U.rnd() < 0.5 ? 'female' : 'male'; boss.name = U.pick(DATA.NAMES[sex]) + ' ' + surname; boss.sex = sex; boss.experience = Math.round((boss.experience || 0) * 0.6); boss.designFactor = U.clamp(boss.designFactor * (0.85 + 0.3 * U.rnd()), 0.3, 1.5); boss.technologyFactor = U.clamp(boss.technologyFactor * (0.85 + 0.3 * U.rnd()), 0.3, 1.5); co.adjustFans(Math.round(co.fans * 0.03)); this.notify('Nueva generación', `${boss.name} coge el relevo en ${co.name}. Los clientes de toda la vida celebran que la óptica siga en la familia (+3 % de clientes fieles).`); }
     this.emit('refresh');
   },
+  /* se puede «responder siempre así» en las decisiones que se repiten (no en mudanzas, relevo, informes ni avisos del equipo) */
+  NO_AUTO: ['level2', 'level3', 'level4', 'relevo', 'report', 'reviews', 'sliders', 'booth', 'hire', 'openDept', 'gameend', 'awards', 'tired'],
+  canAutoAnswer(n) { return !!(n && n.sourceId && n.options && n.options.length > 1 && !this.NO_AUTO.includes(n.sourceId)); },
   closeNotification(n, choice) {
     this.modalOpen = false; this.shownNotification = null;
     if (n && n.sourceId) {
@@ -891,13 +924,13 @@ const G = {
   },
   finishResearch(staff, r) {
     const co = this.company; staff.state = 'idle'; staff.currentResearch = null; const it = DB.item(r.id);
-    if (it.isTopic) { co.topics.push(r.topicId); this.notify('Investigación', `Ya dominamos el estilo «${DB.topic(r.topicId).name}».`); }
+    if (it.isTopic) { co.topics.push(r.topicId); this.notify('Investigación', `Ya dominamos el estilo «${DB.topic(r.topicId).name}».`, 'news'); }
     else {
       co.researchCompleted.push(it.id); co.availableResearch = co.availableResearch.filter(x => x !== it.id);
       if (typeof it.onComplete === 'function') { try { it.onComplete(co); } catch (e) { console.error('onComplete', it.id, e); } }
       Modules.call('onResearch', co, it); let extra = ''; if (it.id === 'CustomEngine') extra = ' Ya puedes crear líneas de producción propias (botón ⚙️ Líneas) e investigar tecnologías.'; if (it.id === 'Marketing') extra = ' Durante el desarrollo de una colección podrás contratar campañas.';
       if (it.big) this.notify('Laboratorio I+D', `Proyecto terminado: ${it.name}. ${it.desc || ''}${it.id === 'RnDLab' ? ' En el menú Investigar aparecerán los proyectos del laboratorio a medida que cumplas sus requisitos.' : ''}`);
-      else this.notify('Investigación completada', `${it.name} investigado.${extra}`);
+      else this.notify('Investigación completada', `${it.name} investigado.${extra}`, extra ? 'popup' : 'news');
     }
     this.emit('refresh');
   },
@@ -1020,7 +1053,7 @@ const G = {
   },
 
   /* ---------- personal ---------- */
-  searchStaff(ratio, test, role) { const co = this.company; const cost = Math.floor(10000 + ratio * 190000); if (co.cash < cost || this.hireSearch) return false; co.adjustCash(-cost, 'Búsqueda de personal'); const r = DATA.roleById(role || 'disenador'); this.hireSearch = { ratio, test: test && test !== 'auto' ? test : r.focus, role: r.id, startWeek: co.currentWeek, targetWeek: co.currentWeek + 1.5 + 1.5 * ratio }; this.candidates = null; return true; },
+  searchStaff(ratio, test, role) { const co = this.company; const cost = Math.floor(10000 + ratio * 190000); if (!this.canSpend(cost) || this.hireSearch) return false; co.adjustCash(-cost, 'Búsqueda de personal'); const r = DATA.roleById(role || 'disenador'); this.hireSearch = { ratio, test: test && test !== 'auto' ? test : r.focus, role: r.id, startWeek: co.currentWeek, targetWeek: co.currentWeek + 1.5 + 1.5 * ratio }; this.candidates = null; return true; },
   generateApplicants(s) {
     const co = this.company; const c = s.ratio; const l = Math.floor(2 + 3 * U.clamp(c + 0.2, 0, 1)); let n = (co.level === 4 ? 0.8 : 0.4) + Modules.sum('candidateBonus', co); const out = []; const names = co.staff.map(x => x.name); let m = 0; const role = DATA.roleById(s.role || 'disenador');
     for (let i = 0; i < l; i++) {
@@ -1275,7 +1308,7 @@ const G = {
     const p = U.clamp(0.15 + co.fans / 2e6 + (g.score >= 8 ? 0.1 : 0), 0, 0.6); if (U.rnd() > p) return false;
     g.flags.counterfeit = { rate: Math.round((0.05 + 0.10 * U.rnd()) * 1000) / 1000, decision: null };
     const ryC = co.realYear(); const where = U.pick(['en los mercadillos de la costa', 'en bazares de medio país'].concat(ryC >= 1998 ? ['en una web con dominio exótico'] : ['en tenderetes de las ferias de verano']).concat(ryC >= 2008 ? ['en redes sociales con fotos robadas de nuestro catálogo'] : []));
-    this.notify('Falsificaciones', this.withTip(`Han aparecido copias de ${g.title} ${where}: mismas formas, materiales de pena. Podemos denunciarlo (abogados y aduanas: ${U.money(this.scaledCost(20000, co))}) para frenar el daño, o mirar para otro lado y asumir que venderemos algo menos.`, 'counterfeit'), 'decision', { sourceId: 'counterfeit', gameId: g.id, options: ['Denunciar (20.000 €)', 'Ignorar'] });
+    const cfCost = this.scaledCost(20000, co); this.notify('Falsificaciones', this.withTip(`Han aparecido copias de ${g.title} ${where}: mismas formas, materiales de pena. Podemos denunciarlo (abogados y aduanas: ${U.money(this.scaledCost(20000, co))}) para frenar el daño, o mirar para otro lado y asumir que venderemos algo menos.`, 'counterfeit'), 'decision', { sourceId: 'counterfeit', gameId: g.id, options: [`Denunciar (${U.money(cfCost)})`, 'Ignorar'] });
     Modules.call('onEvent', co, 'counterfeit', { gameId: g.id, rate: g.flags.counterfeit.rate }); return true;
   },
   resolveCounterfeit(gameId, choice) {

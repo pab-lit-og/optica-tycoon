@@ -493,21 +493,21 @@
     s.lastInspection = w;
     if (kind === 'noDT') {
       s.closedUntil = w + 2; s.repPenalty += 10; s.stats.fines++;
-      notify('Inspección de Sanidade', `Una inspectora de la Consellería de Sanidade se presenta sin avisar y no hay ningún óptico-optometrista colegiado en la óptica: el gabinete funciona sin director técnico. Levanta acta de infracción: multa de ${money(K.INSPECTION_FINE)} y cierre cautelar del gabinete durante dos semanas.`, 'decision', { sourceId: 'gabinete:inspeccion', options: [`Pagar la multa (${money(K.INSPECTION_FINE)})`, `Recurrir con abogados (${money(K.LAWYER)}, 50 %)`] });
+      notify('Inspección de Sanidade', `Una inspectora de la Consellería de Sanidade se presenta sin avisar y no hay ningún óptico-optometrista colegiado en la óptica: el gabinete funciona sin director técnico. Levanta acta de infracción: multa de ${money(G.scaledCost(K.INSPECTION_FINE))} y cierre cautelar del gabinete durante dos semanas.`, 'decision', { sourceId: 'gabinete:inspeccion', options: [`Pagar la multa (${money(G.scaledCost(K.INSPECTION_FINE))})`, `Recurrir con abogados (${money(G.scaledCost(K.LAWYER))}, 50 %)`] });
       addLog(s, w, 'Inspección: sin director técnico. Cierre cautelar 2 semanas.'); return;
     }
     const problems = [];
     if (!working(s, 'software_historia_clinica')) problems.push('no hay registro de historias clínicas');
     for (const id of TIERS[1].instr) if (!own(s, id)) problems.push(`falta ${BY[id].name.toLowerCase()}`);
     if (Object.keys(s.used).some(id => own(s, id)) && U.rnd() < 0.5) problems.push('equipos de segunda mano sin certificado de calibración');
-    if (problems.length) { const fine = K.MINOR_FINE + Math.floor(U.rnd() * 8000); co.adjustCash(-fine, 'Multa de Sanidade'); s.repPenalty += 4; s.stats.fines++; notify('Inspección de Sanidade', `Inspección sorpresa de la Consellería de Sanidade: ${problems.join(', ')}. Acta de infracción leve: multa de ${money(fine)} y requerimiento para subsanarlo.`); addLog(s, w, 'Inspección con multa: ' + problems[0]); }
+    if (problems.length) { const fine = G.scaledCost(K.MINOR_FINE + Math.floor(U.rnd() * 8000)); co.adjustCash(-fine, 'Multa de Sanidade'); s.repPenalty += 4; s.stats.fines++; notify('Inspección de Sanidade', `Inspección sorpresa de la Consellería de Sanidade: ${problems.join(', ')}. Acta de infracción leve: multa de ${money(fine)} y requerimiento para subsanarlo.`); addLog(s, w, 'Inspección con multa: ' + problems[0]); }
     else { s.repBonus += 2; notify('Inspección de Sanidade', 'Inspección sorpresa de la Consellería de Sanidade: director técnico presente con su placa identificativa, gabinete independiente de más de 8 m², instrumental obligatorio completo y calibrado, número de registro sanitario a la vista e historias clínicas al día. Acta sin incidencias; la inspectora se va con un folleto de la nueva colección. +reputación.', 'news'); addLog(s, w, 'Inspección superada sin incidencias'); }
   }
   function breakdowns(co, s, w) {
     for (const id of s.instruments) { const it = BY[id]; if (!it || !it.fail || s.broken[id]) continue; if (U.rnd() < it.fail * (s.used[id] ? 2.5 : 1) / 48) breakInstrument(co, s, id, w); }
   }
   function breakInstrument(co, s, id, w) {
-    const it = BY[id]; const used = !!s.used[id]; const repair = Math.round(it.cost * (used ? 0.15 : 0.10)); s.stats.breakdowns++;
+    const it = BY[id]; const used = !!s.used[id]; const repair = G.repairCost(it.cost * (used ? 0.15 : 0.10)); s.stats.breakdowns++;
     if (it.cost < 30000) { co.adjustCash(-repair, 'Reparación ' + it.name); s.broken[id] = w + (used ? 2 : 1); s.repPenalty += 1; G.log(`Avería: ${it.name}${used ? ' (de segunda mano)' : ''}. Reparación ${money(repair)}, parado ${used ? 'dos semanas' : 'una semana'}.`); addLog(s, w, `Avería de ${it.name} (${money(repair)})`); return; }
     s.broken[id] = w + 6;
     notify('Avería en el gabinete', `${it.name}${used ? ', que compramos de segunda mano,' : ''} ha dejado de funcionar en mitad de una consulta. El servicio técnico pide ${money(repair)} por venir mañana; en garantía tardarían seis semanas. Mientras tanto, las especialidades que lo necesitan se paran.`, 'decision', { sourceId: 'gabinete:averia', options: [`Reparar ya (${money(repair)})`, 'Esperar al servicio técnico (6 semanas)'], gab: { id } });
@@ -517,12 +517,12 @@
     if (!sourceId || sourceId.indexOf('gabinete:') !== 0) return; const s = S(co); const w = s.week || Math.floor(co.currentWeek); const yes = choice === 0;
     switch (sourceId) {
       case 'gabinete:inspeccion':
-        if (yes) co.adjustCash(-K.INSPECTION_FINE, 'Multa de Sanidade');
-        else { co.adjustCash(-K.LAWYER, 'Abogados'); if (U.rnd() < 0.5) { notify('Recurso estimado', 'Los abogados han conseguido que se anule la multa por un defecto de forma. El cierre de dos semanas, eso sí, ya está hecho.', 'news'); } else { co.adjustCash(-K.INSPECTION_FINE, 'Multa de Sanidade'); notify('Recurso desestimado', `El recurso no prospera: pagamos la multa de ${money(K.INSPECTION_FINE)} además de los abogados.`); } }
+        if (yes) co.adjustCash(-G.scaledCost(K.INSPECTION_FINE), 'Multa de Sanidade');
+        else { co.adjustCash(-G.scaledCost(K.LAWYER), 'Abogados'); if (U.rnd() < 0.5) { notify('Recurso estimado', 'Los abogados han conseguido que se anule la multa por un defecto de forma. El cierre de dos semanas, eso sí, ya está hecho.', 'news'); } else { co.adjustCash(-G.scaledCost(K.INSPECTION_FINE), 'Multa de Sanidade'); notify('Recurso desestimado', `El recurso no prospera: pagamos la multa de ${money(G.scaledCost(K.INSPECTION_FINE))} además de los abogados.`); } }
         break;
       case 'gabinete:averia': {
         const id = n && n.gab && n.gab.id; if (!id || !BY[id]) break; const it = BY[id]; const used = !!s.used[id];
-        if (yes) { const repair = Math.round(it.cost * (used ? 0.15 : 0.10)); co.adjustCash(-repair, 'Reparación ' + it.name); s.broken[id] = w + (used ? 3 : 2); s.repPenalty += 1; }
+        if (yes) { const repair = G.repairCost(it.cost * (used ? 0.15 : 0.10)); co.adjustCash(-repair, 'Reparación ' + it.name); s.broken[id] = w + (used ? 3 : 2); s.repPenalty += 1; }
         else { s.broken[id] = w + 6; s.repPenalty += 3; }
         break; }
       case 'gabinete:convenio':
@@ -591,7 +591,7 @@
     toast(`${it.name} comprado${used ? ' de segunda mano' : ''}`); G.log(`Gabinete: ${it.name}${used ? ' (segunda mano)' : ''} por ${money(cost)}.`); return true;
   }
   function replaceUsed(co, id) { const s = S(co); const it = BY[id]; if (!it || !s.used[id]) return false; const cost = Math.round(it.cost * 0.9); if (co.cash < cost) { toast('No hay dinero suficiente'); return false; } co.adjustCash(-cost, it.name + ' nuevo'); delete s.used[id]; delete s.broken[id]; s.stats.invested += cost; toast(`${it.name} sustituido por uno nuevo`); return true; }
-  function repairNow(co, id) { const s = S(co); const it = BY[id]; if (!it || !s.broken[id]) return false; const repair = Math.round(it.cost * (s.used[id] ? 0.15 : 0.10)); if (co.cash < repair) { toast('No hay dinero suficiente'); return false; } co.adjustCash(-repair, 'Reparación ' + it.name); delete s.broken[id]; toast(`${it.name} reparado`); return true; }
+  function repairNow(co, id) { const s = S(co); const it = BY[id]; if (!it || !s.broken[id]) return false; const repair = G.repairCost(it.cost * (s.used[id] ? 0.15 : 0.10)); if (co.cash < repair) { toast('No hay dinero suficiente'); return false; } co.adjustCash(-repair, 'Reparación ' + it.name); delete s.broken[id]; toast(`${it.name} reparado`); return true; }
   function tierReqs(co, s, t) {
     const r = [{ ok: co.level >= t.level, text: `Local: ${C.LEVELS[t.level].name}` }];
     if (t.research) r.push({ ok: co.hasResearch(t.research), text: `Investigación «${resName(t.research)}»` });
